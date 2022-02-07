@@ -100,7 +100,7 @@ def get_list_terminals_within_radius(customer_profile, x_y_terminals, r):
 
 
 
-def generate_transactions_table(customer_profile, start_date = "2018-04-01", nb_days = 10):
+def generate_transactions_table(customer_profile, start_date = "2022-02-06", nb_days = 10):
     
     customer_transactions = []
     
@@ -299,7 +299,7 @@ if __name__ == "__main__":
     transactions_df=customer_profiles_table.groupby('CUSTOMER_ID').apply(lambda x : generate_transactions_table(x.iloc[0], nb_days=5)).reset_index(drop=True)
     
     for t in transactions_df.values.tolist():
-        neo4j_create_statemenet = "MATCH (c:Customer), (t:Terminal) WHERE c.customer_id = "+ str(t[1]) +" AND t.terminal_id = "+ str(t[2]) +" CREATE (c)-[tr:Transaction {TX_DATETIME:'"+str(t[0])+"',	CUSTOMER_ID:'"+str(t[1])+"',	TERMINAL_ID:'"+str(t[2])+"',	TX_AMOUNT:'"+str(t[3])+"',	TX_TIME_SECONDS:'"+str(t[4])+"',	TX_TIME_DAYS:'"+str(t[5])+"'}]->(t)"	
+        neo4j_create_statemenet = "MATCH (c:Customer), (t:Terminal) WHERE c.customer_id = "+ str(t[1]) +" AND t.terminal_id = "+ str(t[2]) +" CREATE (c)-[tr:Transaction {TX_DATETIME:datetime('"+str(t[0]).replace(" ","T")+"'),	CUSTOMER_ID:'"+str(t[1])+"',	TERMINAL_ID:'"+str(t[2])+"',	TX_AMOUNT:'"+str(t[3])+"',	TX_TIME_SECONDS:'"+str(t[4])+"',	TX_TIME_DAYS:'"+str(t[5])+"'}]->(t)"	
         execution_commands.append(neo4j_create_statemenet)
 
 
