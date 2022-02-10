@@ -292,9 +292,38 @@ def generate_CSV(n_customers = 100, n_terminals = 100, nb_days=50, start_date="2
     customer_profiles_table.to_csv("customers.csv",index=False)
     terminal_profiles_table.to_csv("terminals.csv",index=False)
     transactions_df.to_csv("transactions.csv",index=False)
+    return (customer_profiles_table, terminal_profiles_table, transactions_df)
+ 
+def hour_map(x):
+    if (x>=0) & (x<6):
+        period = 'night'
+    elif (x>=6) & (x<12):
+        period = 'morning'
+    elif (x>=12) & (x<18):
+        period = 'afternoon'
+    else:
+        period = 'evening'
+    return period
+
+def extract_period(datetimes):
+    return datetimes.apply(lambda x:hour_map(x.hour))
+
+def extend_transactions(df):
     
+    df=df.assign(TX_PERIOD=lambda x: extract_period(x.TX_DATETIME))
     
-def generate_dataset_from_CSV():
+    typep = ["high-tech", "food", "clothing", "consumable", "other"]
+    
+    li = [None]*df.size
+    li = [random.randint(0,4) for x in li]
+    li = [typep[x] for x in li]
+    df=df.assign(TX_PRODUCT_TYPE=lambda x:pd.Series(li))
+    
+    return df
+    
+
+    
+def load_CSV():
     c1= """ CALL apoc.load.csv('/Users/pietrobarone/Documents/UniMI/DBMS/Progetto/customers.csv') yield map
             CALL apoc.create.node(["Customer"],{customer_id:map.CUSTOMER_ID, x_customer_id:  map.x_customer_id , y_customer_id: map.y_customer_id, mean_amount: map.mean_amount, std_amount: map.std_amount, mean_nb_tx_per_day: map.mean_nb_tx_per_day}) YIELD node 
             return count(*)"""
@@ -319,9 +348,14 @@ def generate_dataset_from_CSV():
 
     
 if __name__ == "__main__":
-    generate_CSV(10,10,5)
+    customer_profiles_table, terminal_profiles_table, transactions_df=generate_CSV(10,10,5)
+    #load_CSV()
+    
+    #extend dataframe
+    transactions_df = extend_transactions(transactions_df)
+    
     #print(str(os.path.getsize("transactions.csv")*0.000001 )+" MB")
-    generate_dataset_from_CSV()
+    
     
  
 
