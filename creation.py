@@ -240,7 +240,38 @@ def add_frauds(customer_profiles_table, terminal_profiles_table, transactions_df
     return transactions_df                 
 
 
-
+def generate_dataset_default(n_customers = 10000, n_terminals = 1000000, nb_days=90, start_date="2018-04-01", r=5):
+    
+    start_time=time.time()
+    customer_profiles_table = generate_customer_profiles_table(n_customers, random_state = 0)
+    print("Time to generate customer profiles table: {0:.2}s".format(time.time()-start_time))
+    
+    start_time=time.time()
+    terminal_profiles_table = generate_terminal_profiles_table(n_terminals, random_state = 1)
+    print("Time to generate terminal profiles table: {0:.2}s".format(time.time()-start_time))
+    
+    start_time=time.time()
+    x_y_terminals = terminal_profiles_table[['x_terminal_id','y_terminal_id']].values.astype(float)
+    customer_profiles_table['available_terminals'] = customer_profiles_table.apply(lambda x : get_list_terminals_within_radius(x, x_y_terminals=x_y_terminals, r=r), axis=1)
+    # With Pandarallel
+    #customer_profiles_table['available_terminals'] = customer_profiles_table.parallel_apply(lambda x : get_list_closest_terminals(x, x_y_terminals=x_y_terminals, r=r), axis=1)
+    customer_profiles_table['nb_terminals']=customer_profiles_table.available_terminals.apply(len)
+    print("Time to associate terminals to customers: {0:.2}s".format(time.time()-start_time))
+    
+    start_time=time.time()
+    transactions_df=customer_profiles_table.groupby('CUSTOMER_ID').apply(lambda x : generate_transactions_table(x.iloc[0], nb_days=nb_days)).reset_index(drop=True)
+    print("Time to generate transactions: {0:.2}s".format(time.time()-start_time))
+    
+    # Sort transactions chronologically
+    transactions_df=transactions_df.sort_values('TX_DATETIME')
+    # Reset indices, starting from 0
+    transactions_df.reset_index(inplace=True,drop=True)
+    transactions_df.reset_index(inplace=True)
+    # TRANSACTION_ID are the dataframe indices, starting from 0
+    transactions_df.rename(columns = {'index':'TRANSACTION_ID'}, inplace = True)
+    transactions_df = add_frauds(customer_profiles_table, terminal_profiles_table, transactions_df)
+    return (customer_profiles_table, terminal_profiles_table, transactions_df)
+    
 
 
 
@@ -253,92 +284,45 @@ def execute(commands):
     for c in commands:
         session.run(c)
 
-def generate_dataset(n_customers=5,n_terminals=5, nb_days=5):
-    execution_commands = []
-    
-    #generate customer profiles
-    customer_profiles_table = generate_customer_profiles_table(n_customers, random_state = 0)
-
-    customer_profiles_list = customer_profiles_table.values.tolist()
-
-
-    
-
-    for c in customer_profiles_list:
-        neo4j_create_statemenet = "create (c:Customer {customer_id:" + str(c[0]) +", x_customer_id:  " + str(c[1]) +", y_customer_id: " + str(c[2]) +", mean_amount: " + str(c[3]) +", std_amount: " + str(c[4])+", mean_nb_tx_per_day: " + str(c[5])+ "})"		
-        execution_commands.append(neo4j_create_statemenet)
 
     
     
-    #generate terminals
-    
-    terminals_table = generate_terminal_profiles_table(n_terminals, random_state = 0)
-
-    terminals_list = terminals_table.values.tolist()
-
-
-    
-
-    for t in terminals_list:
-        neo4j_create_statemenet = "create (t:Terminal {terminal_id:" + str(t[0]) +", x_terminal_id:  " + str(t[1]) +", y_terminal_id: " + str(t[2]) + "})"		
-        execution_commands.append(neo4j_create_statemenet)
-
-
-  
-    
-    
-    
-    # Geographical locations of all terminals as a numpy array
-    x_y_terminals = terminals_table[['x_terminal_id','y_terminal_id']].values.astype(float)
-    
-    #for each customer_profile append the available terminals within the radius
-    customer_profiles_table['available_terminals']=customer_profiles_table.apply(lambda x : get_list_terminals_within_radius(x, x_y_terminals=x_y_terminals, r=50), axis=1)
-    
-    #generate transactions
-    transactions_df=customer_profiles_table.groupby('CUSTOMER_ID').apply(lambda x : generate_transactions_table(x.iloc[0], nb_days)).reset_index(drop=True)
-    
-    #generate fraud
-    transactions_df = add_frauds(customer_profiles_table, terminals_table, transactions_df)
-    
-    for t in transactions_df.values.tolist():
-        neo4j_create_statemenet = "MATCH (c:Customer), (t:Terminal) WHERE c.customer_id = "+ str(t[1]) +" AND t.terminal_id = "+ str(t[2]) +" CREATE (c)-[tr:Transaction {TX_DATETIME:datetime('"+str(t[0]).replace(" ","T")+"'),	CUSTOMER_ID:'"+str(t[1])+"',	TERMINAL_ID:'"+str(t[2])+"',	TX_AMOUNT:'"+str(t[3])+"',	TX_TIME_SECONDS:'"+str(t[4])+"',	TX_TIME_DAYS:'"+str(t[5])+"',	TX_FRAUD:'"+str(t[6])+"'}]->(t)"	
-        execution_commands.append(neo4j_create_statemenet)
-
-
-    execute(execution_commands)
-    
-    
-def generate_dataset_with_loadCSV(n_customers=5,n_terminals=5, nb_days=5):
-    
-    #generate customer profiles
-    customer_profiles_table = generate_customer_profiles_table(n_customers, random_state = 0)
+def generate_CSV(n_customers = 100, n_terminals = 100, nb_days=50, start_date="2022-02-10", r=50):
+    customer_profiles_table, terminal_profiles_table, transactions_df=generate_dataset_default(n_customers,n_terminals,nb_days,start_date,r)
     customer_profiles_table.to_csv("customers.csv",index=False)
-    
-    #generate terminals
-    terminals_table = generate_terminal_profiles_table(n_terminals, random_state = 0)
-    terminals_table.to_csv("terminals.csv",index=False)
-    
-    # Geographical locations of all terminals as a numpy array
-    x_y_terminals = terminals_table[['x_terminal_id','y_terminal_id']].values.astype(float)
-    
-    #for each customer_profile append the available terminals within the radius
-    customer_profiles_table['available_terminals']=customer_profiles_table.apply(lambda x : get_list_terminals_within_radius(x, x_y_terminals=x_y_terminals, r=50), axis=1)
-    
-    #generate transactions
-    transactions_df=customer_profiles_table.groupby('CUSTOMER_ID').apply(lambda x : generate_transactions_table(x.iloc[0], nb_days)).reset_index(drop=True)
-    
-    #generate fraud
-    transactions_df = add_frauds(customer_profiles_table, terminals_table, transactions_df)
+    terminal_profiles_table.to_csv("terminals.csv",index=False)
     transactions_df.to_csv("transactions.csv",index=False)
+    
+    
+def generate_dataset_from_CSV():
+    c1= """ CALL apoc.load.csv('/Users/pietrobarone/Documents/UniMI/DBMS/Progetto/customers.csv') yield map
+            CALL apoc.create.node(["Customer"],{customer_id:map.CUSTOMER_ID, x_customer_id:  map.x_customer_id , y_customer_id: map.y_customer_id, mean_amount: map.mean_amount, std_amount: map.std_amount, mean_nb_tx_per_day: map.mean_nb_tx_per_day}) YIELD node 
+            return count(*)"""
+    c2= """ CALL apoc.load.csv('/Users/pietrobarone/Documents/UniMI/DBMS/Progetto/terminals.csv') yield map
+            CALL apoc.create.node(["Terminal"],{terminal_id:map.TERMINAL_ID, x_terminal_id:  map.x_terminal_id , y_terminal_id: map.y_terminal_id}) YIELD node 
+            return count(*)"""
+    
+    c3= """ CALL apoc.load.csv('/Users/pietrobarone/Documents/UniMI/DBMS/Progetto/transactions.csv') yield map
+            MATCH (c:Customer),(t:Terminal)
+            WHERE c.customer_id=map.CUSTOMER_ID and t.terminal_id=map.TERMINAL_ID
+            CALL apoc.create.relationship(c,"Transaction",{transaction_id:map.TRANSACTION_ID,tx_time_seconds:map.TX_TIME_SECONDS, tx_time_days:map.TX_TIME_DAYS,customer_id:map.CUSTOMER_ID,terminal_id:map.TERMINAL_ID,tx_amount:map.TX_AMOUNT, tx_datetime:datetime({epochmillis: apoc.date.parse(map.TX_DATETIME, "ms", "yyyy-MM-dd HH:mm:ss")}), tx_fraud:map.TX_FRAUD},t) YIELD rel
+            return count(*)"""
 
+    commands=[]
+    commands.append(c1)
+    commands.append(c2)
+    commands.append(c3)
+    
+    execute(commands)
 
 
 
     
 if __name__ == "__main__":
-    #generate_dataset(50,100,50)
-    generate_dataset_with_loadCSV(50,100,50)
-
+    generate_CSV(10,10,5)
+    #print(str(os.path.getsize("transactions.csv")*0.000001 )+" MB")
+    generate_dataset_from_CSV()
+    
  
 
     
