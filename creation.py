@@ -292,26 +292,26 @@ def extend_transactions(df):
 
     
 def load_CSV():
-    c1= """ CALL apoc.load.csv('/Users/pietrobarone/Documents/UniMI/DBMS/Progetto/customers.csv') yield map
-            CALL apoc.create.node(["Customer"],{customer_id:map.CUSTOMER_ID, x_customer_id:  map.x_customer_id , y_customer_id: map.y_customer_id, mean_amount: map.mean_amount, std_amount: map.std_amount, mean_nb_tx_per_day: map.mean_nb_tx_per_day}) YIELD node 
-            return count(*)"""
-    c2= """ CALL apoc.load.csv('/Users/pietrobarone/Documents/UniMI/DBMS/Progetto/terminals.csv') yield map
-            CALL apoc.create.node(["Terminal"],{terminal_id:map.TERMINAL_ID, x_terminal_id:  map.x_terminal_id , y_terminal_id: map.y_terminal_id}) YIELD node 
-            return count(*)"""
-    i1= """ CREATE  INDEX customer_index 
-            FOR (c:Customer)
-            ON (c.customer_id)"""
-    i2= """ CREATE  INDEX terminal_index 
-            FOR (t:Terminal)
-            ON (t.terminal_id)"""
-    c3= """ CALL apoc.load.csv('/Users/pietrobarone/Documents/UniMI/DBMS/Progetto/transactions.csv') yield map
+    c1=""" CALL apoc.periodic.iterate('
+            CALL apoc.load.csv(\\'/Users/pietrobarone/Documents/UniMI/DBMS/Progetto/customers.csv\\') yield map as row return row','
+            CALL apoc.create.node(["Customer"],{customer_id:row.CUSTOMER_ID, x_customer_id:  row.x_customer_id , y_customer_id: row.y_customer_id, mean_amount: row.mean_amount, std_amount: row.std_amount, mean_nb_tx_per_day: row.mean_nb_tx_per_day}) YIELD node 
+                        return count(*)
+        ', { parallel:true, concurrency:50});"""
+    c2= """ CALL apoc.periodic.iterate('
+            CALL apoc.load.csv(\\'/Users/pietrobarone/Documents/UniMI/DBMS/Progetto/terminals.csv\\') yield map as row return row','
+            CALL apoc.create.node(["Terminal"],{terminal_id:row.TERMINAL_ID, x_terminal_id:  row.x_terminal_id , y_terminal_id: row.y_terminal_id}) YIELD node 
+            return count(*)
+            ', { parallel:true, concurrency:50});"""
+    i1= """ CREATE CONSTRAINT customer_id FOR (c:Customer) REQUIRE c.customer_id IS UNIQUE"""
+    i2= """ CREATE CONSTRAINT terminal_id FOR (t:Terminal) REQUIRE t.terminal_id IS UNIQUE"""
+    c3= """ CALL apoc.periodic.iterate('
+            CALL apoc.load.csv(\\'/Users/pietrobarone/Documents/UniMI/DBMS/Progetto/transactions.csv\\') yield map as row return row','
             MATCH (c:Customer),(t:Terminal)
-            WHERE c.customer_id=map.CUSTOMER_ID and t.terminal_id=map.TERMINAL_ID
-            CALL apoc.create.relationship(c,"Transaction",{transaction_id:map.TRANSACTION_ID,tx_time_seconds:map.TX_TIME_SECONDS, tx_time_days:map.TX_TIME_DAYS,customer_id:map.CUSTOMER_ID,terminal_id:map.TERMINAL_ID,tx_amount:map.TX_AMOUNT, tx_datetime:datetime({epochmillis: apoc.date.parse(map.TX_DATETIME, "ms", "yyyy-MM-dd HH:mm:ss")}), tx_fraud:map.TX_FRAUD},t) YIELD rel
-            return count(*)"""
-    i3= """ CREATE  INDEX transaction_index 
-            FOR (t:Transaction)
-            ON (t.transaction_id)"""
+            WHERE c.customer_id=row.CUSTOMER_ID and t.terminal_id=row.TERMINAL_ID
+            CALL apoc.create.relationship(c,"Transaction",{transaction_id:row.TRANSACTION_ID,tx_time_seconds:row.TX_TIME_SECONDS, tx_time_days:row.TX_TIME_DAYS,customer_id:row.CUSTOMER_ID,terminal_id:row.TERMINAL_ID,tx_amount:row.TX_AMOUNT, tx_datetime:datetime({epochmillis: apoc.date.parse(row.TX_DATETIME, "ms", "yyyy-MM-dd HH:mm:ss")}), tx_fraud:row.TX_FRAUD},t) YIELD rel
+            return count(*)
+            ', { parallel:true, concurrency:50});"""
+    i3= """ CREATE CONSTRAINT transaction_id FOR (t:Transaction) REQUIRE t.transaction_id IS UNIQUE"""
             
     start_time=time.time()
     execute([c1,c2,i1,i2,c3,i3])
@@ -319,18 +319,20 @@ def load_CSV():
 
 
 def clear_DB():
-    c1="""drop index ON:Terminal(terminal_id)"""
-    c2="""drop index ON:Customer(customer_id)"""
-    c3="""DROP INDEX transaction_index"""
+    c1="""drop CONSTRAINT terminal_id"""
+    c2="""drop CONSTRAINT customer_id"""
+    c3="""DROP CONSTRAINT transaction_id"""
     c4="""match (n) detach delete n"""
 
 
     execute([c1,c2,c3,c4])
 
 def updateDB(df):
-    c=  """ CALL apoc.load.csv('/Users/pietrobarone/Documents/UniMI/DBMS/Progetto/extended_transactions.csv') yield map
-            MATCH ()-[t:Transaction {transaction_id: map.TRANSACTION_ID}]-()
-            set t.tx_period =map.TX_PERIOD, t.tx_product_type =map.TX_PRODUCT_TYPE"""
+    c=  """ CALL apoc.periodic.iterate('
+            CALL apoc.load.csv(\\'/Users/pietrobarone/Documents/UniMI/DBMS/Progetto/extended_transactions.csv\\') yield map as row return row','
+            MATCH ()-[t:Transaction {transaction_id: row.TRANSACTION_ID}]-()
+            set t.tx_period =row.TX_PERIOD, t.tx_product_type =row.TX_PRODUCT_TYPE
+            ', { parallel:true, concurrency:1000,batchSize:100});"""
     
     start_time=time.time()
     execute([c])
