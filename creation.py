@@ -338,11 +338,32 @@ def updateDB(df):
     execute([c])
     print("Time update DB: {0:.2}s".format(time.time()-start_time))
 
+def set_buying_friends():
+    start_time=time.time()
+    for t in ["high-tech", "food", "clothing", "consumable", "other"]:
+        
+        c="""CALL apoc.periodic.iterate(
+        "MATCH (ter:Terminal) Return ter",
+        "match (t:Terminal{terminal_id:ter.terminal_id})-[tr:Transaction{tx_product_type:'"""+ t +"""'}]-(c:Customer) with count(tr)as n,c where n>3 
+            with collect(c) as cs
+            UNWIND cs as c1
+            UNWIND cs as c2
+            with c1,c2
+            where c1<>c2
+            MERGE (c1)-[r:BuyingFriends]->(c2)
+            RETURN *",
+            { parallel:true, concurrency:1000,batchSize:100})
+        """
+        execute([c])
     
+    
+    
+    print("Time to set buying friends: {0:.2}s".format(time.time()-start_time))
+
     
 if __name__ == "__main__":
     clear_DB()
-    customer_profiles_table, terminal_profiles_table, transactions_df=generate_CSV(1000,1000,5)
+    customer_profiles_table, terminal_profiles_table, transactions_df=generate_CSV(1000,100,5)
     
     load_CSV()
     
@@ -356,6 +377,10 @@ if __name__ == "__main__":
     s2=os.path.getsize("customers.csv")
     s3=os.path.getsize("terminals.csv")
     print(str((s1+s2+s3)*0.000001 )+" MB")
+    
+    set_buying_friends()
+    
+    
     
     
  
