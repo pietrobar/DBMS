@@ -252,7 +252,7 @@ def execute(commands):
 
     
     
-def generate_CSV(n_customers = 100, n_terminals = 100, nb_days=50, start_date="2022-02-10", r=5):
+def generate_CSV(n_customers = 100, n_terminals = 100, nb_days=50, start_date="2022-02-20", r=10):
     customer_profiles_table, terminal_profiles_table, transactions_df=generate_dataset_default(n_customers,n_terminals,nb_days,start_date,r)
     customer_profiles_table.to_csv("customers.csv",index=False)
     terminal_profiles_table.to_csv("terminals.csv",index=False)
@@ -274,6 +274,8 @@ def extract_period(datetimes):
     return datetimes.apply(lambda x:hour_map(x.hour))
 
 def extend_transactions(df):
+
+    start_time=time.time()
     
     df=df.assign(TX_PERIOD=lambda x: extract_period(x.TX_DATETIME))
     
@@ -283,7 +285,8 @@ def extend_transactions(df):
     li = [random.randint(0,4) for x in li]
     li = [typep[x] for x in li]
     df=df.assign(TX_PRODUCT_TYPE=lambda x:pd.Series(li))
-    print("transactions extended")
+    print("Time to extend transactions with 'tipe of product' and 'period of day': {0:.2}s".format(time.time()-start_time))
+
     return df
     
 
@@ -306,23 +309,33 @@ def load_CSV():
             WHERE c.customer_id=map.CUSTOMER_ID and t.terminal_id=map.TERMINAL_ID
             CALL apoc.create.relationship(c,"Transaction",{transaction_id:map.TRANSACTION_ID,tx_time_seconds:map.TX_TIME_SECONDS, tx_time_days:map.TX_TIME_DAYS,customer_id:map.CUSTOMER_ID,terminal_id:map.TERMINAL_ID,tx_amount:map.TX_AMOUNT, tx_datetime:datetime({epochmillis: apoc.date.parse(map.TX_DATETIME, "ms", "yyyy-MM-dd HH:mm:ss")}), tx_fraud:map.TX_FRAUD},t) YIELD rel
             return count(*)"""
-        
+    i3= """ CREATE  INDEX transaction_index 
+            FOR (t:Transaction)
+            ON (t.transaction_id)"""
+            
+    start_time=time.time()
+    execute([c1,c2,i1,i2,c3,i3])
+    print("Time to load CSV into DB: {0:.2}s".format(time.time()-start_time))
 
-    execute([c1,c2,i1,i2,c3])
 
 def clear_DB():
     c1="""drop index ON:Terminal(terminal_id)"""
     c2="""drop index ON:Customer(customer_id)"""
-    c3="""match (n) detach delete n"""
+    c3="""DROP INDEX transaction_index"""
+    c4="""match (n) detach delete n"""
 
-    execute([c1,c2,c3])
+
+    execute([c1,c2,c3,c4])
 
 def updateDB(df):
     c=  """ CALL apoc.load.csv('/Users/pietrobarone/Documents/UniMI/DBMS/Progetto/extended_transactions.csv') yield map
             MATCH ()-[t:Transaction {transaction_id: map.TRANSACTION_ID}]-()
             set t.tx_period =map.TX_PERIOD, t.tx_product_type =map.TX_PRODUCT_TYPE"""
+    
+    start_time=time.time()
     execute([c])
-    print("db updated")
+    print("Time update DB: {0:.2}s".format(time.time()-start_time))
+
     
     
 if __name__ == "__main__":
