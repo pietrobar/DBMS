@@ -296,12 +296,12 @@ def load_CSV(connection):
             CALL apoc.load.csv(\\'/Users/pietrobarone/Documents/UniMI/DBMS/Progetto/customers.csv\\') yield map as row return row','
             CALL apoc.create.node(["Customer"],{customer_id:row.CUSTOMER_ID, x_customer_id:  row.x_customer_id , y_customer_id: row.y_customer_id, mean_amount: row.mean_amount, std_amount: row.std_amount, mean_nb_tx_per_day: row.mean_nb_tx_per_day}) YIELD node 
                         return count(*)
-        ', { parallel:true, concurrency:50});"""
+        ', { parallel:true, concurrency:1000,batchSize:1000});"""
     c2= """ CALL apoc.periodic.iterate('
             CALL apoc.load.csv(\\'/Users/pietrobarone/Documents/UniMI/DBMS/Progetto/terminals.csv\\') yield map as row return row','
             CALL apoc.create.node(["Terminal"],{terminal_id:row.TERMINAL_ID, x_terminal_id:  row.x_terminal_id , y_terminal_id: row.y_terminal_id}) YIELD node 
             return count(*)
-            ', { parallel:true, concurrency:50});"""
+            ', { parallel:true, concurrency:1000,batchSize:1000});"""
     i1= """ CREATE CONSTRAINT customer_id FOR (c:Customer) REQUIRE c.customer_id IS UNIQUE"""
     i2= """ CREATE CONSTRAINT terminal_id FOR (t:Terminal) REQUIRE t.terminal_id IS UNIQUE"""
     c3= """ CALL apoc.periodic.iterate('
@@ -310,7 +310,7 @@ def load_CSV(connection):
             WHERE c.customer_id=row.CUSTOMER_ID and t.terminal_id=row.TERMINAL_ID
             CALL apoc.create.relationship(c,"Transaction",{transaction_id:row.TRANSACTION_ID,tx_time_seconds:row.TX_TIME_SECONDS, tx_time_days:row.TX_TIME_DAYS,customer_id:row.CUSTOMER_ID,terminal_id:row.TERMINAL_ID,tx_amount:row.TX_AMOUNT, tx_datetime:datetime({epochmillis: apoc.date.parse(row.TX_DATETIME, "ms", "yyyy-MM-dd HH:mm:ss")}), tx_fraud:row.TX_FRAUD},t) YIELD rel
             return count(*)
-            ', { parallel:true, concurrency:50});"""
+            ', { parallel:true, concurrency:10000,batchSize:1000});"""
     i3= """ CREATE CONSTRAINT transaction_id FOR (t:Transaction) REQUIRE t.transaction_id IS UNIQUE"""
             
     start_time=time.time()
@@ -332,7 +332,7 @@ def updateDB(connection):
             CALL apoc.load.csv(\\'/Users/pietrobarone/Documents/UniMI/DBMS/Progetto/extended_transactions.csv\\') yield map as row return row','
             MATCH ()-[t:Transaction {transaction_id: row.TRANSACTION_ID}]-()
             set t.tx_period =row.TX_PERIOD, t.tx_product_type =row.TX_PRODUCT_TYPE
-            ', { parallel:true, concurrency:1000,batchSize:100});"""
+            ', { parallel:true, concurrency:10000,batchSize:1000});"""
     
     start_time=time.time()
     execute([c],connection)
