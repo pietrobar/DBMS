@@ -339,18 +339,17 @@ def updateDB(connection):
     print("Time update DB: {0:.2}s".format(time.time()-start_time))
     
 def addFrauds_asRequested(connection):
-    c= """  match ()-[t:Transaction]->(:Terminal)
+    c= """  call apoc.periodic.iterate(
+    "match ()-[t:Transaction]->(:Terminal)
             with datetime() as today,t
-            where toInteger(apoc.date.format(today.epochMillis-t.tx_datetime.epochMillis,"ms", "dd"))<31
-            with t.terminal_id as tid,avg(toInteger(t.tx_amount)) as avg
-            CALL{
-                with tid,avg
-                match ()-[t:Transaction]-()
-                where t.terminal_id = tid and toInteger(t.tx_amount)>avg+avg/2
-                SET t.tx_fraud="1"
-                return t as fraudolentTransaction
-            }
-            return fraudolentTransaction"""
+            where toInteger(apoc.date.format(today.epochMillis-t.tx_datetime.epochMillis,\\"ms\\", \\"dd\\"))<31
+            with t.terminal_id as tid,avg(toInteger(t.tx_amount)) as avg return tid,avg",
+    "match ()-[t:Transaction]-()
+    where t.terminal_id = tid and toInteger(t.tx_amount)>avg+avg/2
+    SET t.tx_fraud=\\"1\\"
+    return t as fraudolentTransaction",
+    { parallel:true, concurrency:1000,batchSize:100}
+)"""
     start_time=time.time()
     execute([c],connection)
     print("Time to add Frauds: {0:.2}s".format(time.time()-start_time))
@@ -386,13 +385,14 @@ if __name__ == "__main__":
     
     load_CSV(data_base_connection)
     
-    
+    addFrauds_asRequested(data_base_connection)
+
     # extend dataframe
     transactions_df = extend_transactions(transactions_df)
     
     transactions_df.to_csv("extended_transactions.csv",index=False)
     updateDB(data_base_connection)
-    
+
     s1=os.path.getsize("transactions.csv")
     s2=os.path.getsize("customers.csv")
     s3=os.path.getsize("terminals.csv")
