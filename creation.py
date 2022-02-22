@@ -209,11 +209,11 @@ def generate_dataset_default(n_customers = 10000, n_terminals = 1000000, nb_days
     
     start_time=time.time()
     customer_profiles_table = generate_customer_profiles_table(n_customers, random_state = 0)
-    print("Time to generate customer profiles table: {0:.2}s".format(time.time()-start_time))
+    print("Time to generate customer profiles table: {0:.10}s".format(time.time()-start_time))
     
     start_time=time.time()
     terminal_profiles_table = generate_terminal_profiles_table(n_terminals, random_state = 1)
-    print("Time to generate terminal profiles table: {0:.2}s".format(time.time()-start_time))
+    print("Time to generate terminal profiles table: {0:.10}s".format(time.time()-start_time))
     
     start_time=time.time()
     x_y_terminals = terminal_profiles_table[['x_terminal_id','y_terminal_id']].values.astype(float)
@@ -221,11 +221,11 @@ def generate_dataset_default(n_customers = 10000, n_terminals = 1000000, nb_days
     # With Pandarallel
     #customer_profiles_table['available_terminals'] = customer_profiles_table.parallel_apply(lambda x : get_list_closest_terminals(x, x_y_terminals=x_y_terminals, r=r), axis=1)
     customer_profiles_table['nb_terminals']=customer_profiles_table.available_terminals.apply(len)
-    print("Time to associate terminals to customers: {0:.2}s".format(time.time()-start_time))
+    print("Time to associate terminals to customers: {0:.10}s".format(time.time()-start_time))
     
     start_time=time.time()
     transactions_df=customer_profiles_table.groupby('CUSTOMER_ID').apply(lambda x : generate_transactions_table(x.iloc[0], nb_days=nb_days)).reset_index(drop=True)
-    print("Time to generate transactions: {0:.2}s".format(time.time()-start_time))
+    print("Time to generate transactions: {0:.10}s".format(time.time()-start_time))
     
     # Sort transactions chronologically
     transactions_df=transactions_df.sort_values('TX_DATETIME')
@@ -285,7 +285,7 @@ def extend_transactions(df):
     li = [random.randint(0,4) for x in li]
     li = [typep[x] for x in li]
     df=df.assign(TX_PRODUCT_TYPE=lambda x:pd.Series(li))
-    print("Time to extend transactions with 'tipe of product' and 'period of day': {0:.2}s".format(time.time()-start_time))
+    print("Time to extend transactions with 'tipe of product' and 'period of day': {0:.10}s".format(time.time()-start_time))
 
     return df
     
@@ -315,7 +315,7 @@ def load_CSV(connection):
             
     start_time=time.time()
     execute([c1,c2,i1,i2,c3,i3],connection)
-    print("Time to load CSV into DB: {0:.2}s".format(time.time()-start_time))
+    print("Time to load CSV into DB: {0:.10}s".format(time.time()-start_time))
 
 
 def clear_DB(connection):
@@ -336,7 +336,7 @@ def updateDB(connection):
     
     start_time=time.time()
     execute([c],connection)
-    print("Time update DB: {0:.2}s".format(time.time()-start_time))
+    print("Time update DB: {0:.10}s".format(time.time()-start_time))
     
 def addFrauds_asRequested(connection):
     c= """  call apoc.periodic.iterate(
@@ -352,7 +352,7 @@ def addFrauds_asRequested(connection):
 )"""
     start_time=time.time()
     execute([c],connection)
-    print("Time to add Frauds: {0:.2}s".format(time.time()-start_time))
+    print("Time to add Frauds: {0:.10}s".format(time.time()-start_time))
 
     
 def set_buying_friends(connection):
@@ -375,17 +375,17 @@ def set_buying_friends(connection):
     
     
     
-    print("Time to set buying friends: {0:.2}s".format(time.time()-start_time))
+    print("Time to set buying friends: {0:.10}s".format(time.time()-start_time))
 
     
 if __name__ == "__main__":
     data_base_connection=GraphDatabase.driver(uri = "bolt://localhost:7687", auth=("neo4j", "1234"))
     clear_DB(data_base_connection)
-    customer_profiles_table, terminal_profiles_table, transactions_df=generate_CSV(1000,100,5)
+    customer_profiles_table, terminal_profiles_table, transactions_df=generate_CSV(1000,100,40)
     
     load_CSV(data_base_connection)
     
-    addFrauds_asRequested(data_base_connection)
+    #addFrauds_asRequested(data_base_connection)
 
     # extend dataframe
     transactions_df = extend_transactions(transactions_df)
@@ -398,7 +398,7 @@ if __name__ == "__main__":
     s3=os.path.getsize("terminals.csv")
     print(str((s1+s2+s3)*0.000001 )+" MB")
     
-    set_buying_friends(data_base_connection)
+    #set_buying_friends(data_base_connection)
     
     
     
