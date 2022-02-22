@@ -338,6 +338,21 @@ def updateDB(connection):
     execute([c],connection)
     print("Time update DB: {0:.10}s".format(time.time()-start_time))
     
+def fastUpdateDB(connection):
+    d="""match ()-[r:Transaction]-() detach delete r"""
+    c="""   CALL apoc.periodic.iterate('
+            CALL apoc.load.csv(\\'/Users/pietrobarone/Documents/UniMI/DBMS/Progetto/extended_transactions.csv\\') yield map as row return row','
+            MATCH (c:Customer),(t:Terminal)
+            WHERE c.customer_id=row.CUSTOMER_ID and t.terminal_id=row.TERMINAL_ID
+            CALL apoc.create.relationship(c,"Transaction",{transaction_id:row.TRANSACTION_ID,tx_time_seconds:row.TX_TIME_SECONDS, tx_time_days:row.TX_TIME_DAYS,customer_id:row.CUSTOMER_ID,terminal_id:row.TERMINAL_ID,tx_amount:row.TX_AMOUNT, tx_datetime:datetime({epochmillis: apoc.date.parse(row.TX_DATETIME, "ms", "yyyy-MM-dd HH:mm:ss")}), tx_fraud:row.TX_FRAUD,tx_period:row.TX_PERIOD, tx_product_type:row.TX_PRODUCT_TYPE},t) YIELD rel
+            return count(*)
+            ', { parallel:true, concurrency:10000,batchSize:1000});"""
+    
+    start_time=time.time()
+    execute([d,c],connection)
+    print("Time to FAST update DB: {0:.10}s".format(time.time()-start_time))    
+    
+    
 def addFrauds_asRequested(connection):
     c= """  call apoc.periodic.iterate(
     "match ()-[t:Transaction]->(:Terminal)
@@ -385,13 +400,15 @@ if __name__ == "__main__":
     
     load_CSV(data_base_connection)
     
-    #addFrauds_asRequested(data_base_connection)
 
     # extend dataframe
     transactions_df = extend_transactions(transactions_df)
     
     transactions_df.to_csv("extended_transactions.csv",index=False)
-    updateDB(data_base_connection)
+    #updateDB(data_base_connection)
+    fastUpdateDB(data_base_connection)
+    #addFrauds_asRequested(data_base_connection) #se fatto prima dell'update usare updateDB invece di fastUpdateDB
+
 
     s1=os.path.getsize("transactions.csv")
     s2=os.path.getsize("customers.csv")
