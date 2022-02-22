@@ -234,7 +234,7 @@ def generate_dataset_default(n_customers = 10000, n_terminals = 1000000, nb_days
     transactions_df.reset_index(inplace=True)
     # TRANSACTION_ID are the dataframe indices, starting from 0
     transactions_df.rename(columns = {'index':'TRANSACTION_ID'}, inplace = True)
-    # transactions_df = add_frauds(customer_profiles_table, terminal_profiles_table, transactions_df)
+    #transactions_df = add_frauds(customer_profiles_table, terminal_profiles_table, transactions_df)
     return (customer_profiles_table, terminal_profiles_table, transactions_df)
     
 
@@ -327,7 +327,7 @@ def clear_DB():
 
     execute([c1,c2,c3,c4])
 
-def updateDB(df):
+def updateDB():
     c=  """ CALL apoc.periodic.iterate('
             CALL apoc.load.csv(\\'/Users/pietrobarone/Documents/UniMI/DBMS/Progetto/extended_transactions.csv\\') yield map as row return row','
             MATCH ()-[t:Transaction {transaction_id: row.TRANSACTION_ID}]-()
@@ -337,7 +337,25 @@ def updateDB(df):
     start_time=time.time()
     execute([c])
     print("Time update DB: {0:.2}s".format(time.time()-start_time))
+    
+def addFrauds_asRequested():
+    c= """  match ()-[t:Transaction]->(:Terminal)
+            with datetime() as today,t
+            where toInteger(apoc.date.format(today.epochMillis-t.tx_datetime.epochMillis,"ms", "dd"))<31
+            with t.terminal_id as tid,avg(toInteger(t.tx_amount)) as avg
+            CALL{
+                with tid,avg
+                match ()-[t:Transaction]-()
+                where t.terminal_id = tid and toInteger(t.tx_amount)>avg+avg/2
+                SET t.tx_fraud="1"
+                return t as fraudolentTransaction
+            }
+            return fraudolentTransaction"""
+    start_time=time.time()
+    execute([c])
+    print("Time to add Frauds: {0:.2}s".format(time.time()-start_time))
 
+    
 def set_buying_friends():
     start_time=time.time()
     for t in ["high-tech", "food", "clothing", "consumable", "other"]:
@@ -367,11 +385,12 @@ if __name__ == "__main__":
     
     load_CSV()
     
+    
     # extend dataframe
     transactions_df = extend_transactions(transactions_df)
     
     transactions_df.to_csv("extended_transactions.csv",index=False)
-    updateDB(transactions_df)
+    updateDB()
     
     s1=os.path.getsize("transactions.csv")
     s2=os.path.getsize("customers.csv")
