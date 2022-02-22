@@ -243,8 +243,8 @@ def generate_dataset_default(n_customers = 10000, n_terminals = 1000000, nb_days
 
 
     
-def execute(commands):
-    data_base_connection = GraphDatabase.driver(uri = "bolt://localhost:7687", auth=("neo4j", "1234"))
+def execute(commands,data_base_connection):
+    
     session = data_base_connection.session()    
     for c in commands:
         session.run(c)
@@ -291,7 +291,7 @@ def extend_transactions(df):
     
 
     
-def load_CSV():
+def load_CSV(connection):
     c1=""" CALL apoc.periodic.iterate('
             CALL apoc.load.csv(\\'/Users/pietrobarone/Documents/UniMI/DBMS/Progetto/customers.csv\\') yield map as row return row','
             CALL apoc.create.node(["Customer"],{customer_id:row.CUSTOMER_ID, x_customer_id:  row.x_customer_id , y_customer_id: row.y_customer_id, mean_amount: row.mean_amount, std_amount: row.std_amount, mean_nb_tx_per_day: row.mean_nb_tx_per_day}) YIELD node 
@@ -314,20 +314,20 @@ def load_CSV():
     i3= """ CREATE CONSTRAINT transaction_id FOR (t:Transaction) REQUIRE t.transaction_id IS UNIQUE"""
             
     start_time=time.time()
-    execute([c1,c2,i1,i2,c3,i3])
+    execute([c1,c2,i1,i2,c3,i3],connection)
     print("Time to load CSV into DB: {0:.2}s".format(time.time()-start_time))
 
 
-def clear_DB():
+def clear_DB(connection):
     c1="""drop CONSTRAINT terminal_id"""
     c2="""drop CONSTRAINT customer_id"""
     c3="""DROP CONSTRAINT transaction_id"""
     c4="""match (n) detach delete n"""
 
 
-    execute([c1,c2,c3,c4])
+    execute([c1,c2,c3,c4],connection)
 
-def updateDB():
+def updateDB(connection):
     c=  """ CALL apoc.periodic.iterate('
             CALL apoc.load.csv(\\'/Users/pietrobarone/Documents/UniMI/DBMS/Progetto/extended_transactions.csv\\') yield map as row return row','
             MATCH ()-[t:Transaction {transaction_id: row.TRANSACTION_ID}]-()
@@ -335,10 +335,10 @@ def updateDB():
             ', { parallel:true, concurrency:1000,batchSize:100});"""
     
     start_time=time.time()
-    execute([c])
+    execute([c],connection)
     print("Time update DB: {0:.2}s".format(time.time()-start_time))
     
-def addFrauds_asRequested():
+def addFrauds_asRequested(connection):
     c= """  match ()-[t:Transaction]->(:Terminal)
             with datetime() as today,t
             where toInteger(apoc.date.format(today.epochMillis-t.tx_datetime.epochMillis,"ms", "dd"))<31
@@ -352,11 +352,11 @@ def addFrauds_asRequested():
             }
             return fraudolentTransaction"""
     start_time=time.time()
-    execute([c])
+    execute([c],connection)
     print("Time to add Frauds: {0:.2}s".format(time.time()-start_time))
 
     
-def set_buying_friends():
+def set_buying_friends(connection):
     start_time=time.time()
     for t in ["high-tech", "food", "clothing", "consumable", "other"]:
         
@@ -372,7 +372,7 @@ def set_buying_friends():
             RETURN *",
             { parallel:true, concurrency:1000,batchSize:100})
         """
-        execute([c])
+        execute([c],connection)
     
     
     
@@ -380,24 +380,25 @@ def set_buying_friends():
 
     
 if __name__ == "__main__":
-    clear_DB()
+    data_base_connection=GraphDatabase.driver(uri = "bolt://localhost:7687", auth=("neo4j", "1234"))
+    clear_DB(data_base_connection)
     customer_profiles_table, terminal_profiles_table, transactions_df=generate_CSV(1000,100,5)
     
-    load_CSV()
+    load_CSV(data_base_connection)
     
     
     # extend dataframe
     transactions_df = extend_transactions(transactions_df)
     
     transactions_df.to_csv("extended_transactions.csv",index=False)
-    updateDB()
+    updateDB(data_base_connection)
     
     s1=os.path.getsize("transactions.csv")
     s2=os.path.getsize("customers.csv")
     s3=os.path.getsize("terminals.csv")
     print(str((s1+s2+s3)*0.000001 )+" MB")
     
-    set_buying_friends()
+    set_buying_friends(data_base_connection)
     
     
     
