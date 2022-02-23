@@ -11,11 +11,12 @@ import time
 
 import random
 
+import threading, queue
+
 from pandarallel import pandarallel
 pandarallel.initialize()
 
-# For plotting
-#%matplotlib inline
+
 
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -52,10 +53,6 @@ def generate_customer_profiles_table(n_customers, random_state=0):
     
     return customer_profiles_table
 
-# n_customers = 5
-# customer_profiles_table = generate_customer_profiles_table(n_customers, random_state = 0)
-# customer_profiles_table.to_csv("customer_profiles",index=False)
-# print(customer_profiles_table)
 
 def generate_terminal_profiles_table(n_terminals, random_state=0):
     
@@ -77,9 +74,6 @@ def generate_terminal_profiles_table(n_terminals, random_state=0):
     
     return terminal_profiles_table
 
-# n_terminals = 5
-# terminal_profiles_table = generate_terminal_profiles_table(n_terminals, random_state = 0)
-# print(terminal_profiles_table)
 
 
 def get_list_terminals_within_radius(customer_profile, x_y_terminals, r):
@@ -206,16 +200,33 @@ def add_frauds(customer_profiles_table, terminal_profiles_table, transactions_df
     print("Number of frauds from scenario 3: "+str(nb_frauds_scenario_3))
     
     return transactions_df                 
-
+def enthread(target, args):
+    q = queue.Queue()
+    def wrapper():
+        q.put(target(*args))
+    t = threading.Thread(target=wrapper)
+    t.start()
+    return q,t
 
 def generate_dataset_default(n_customers = 10000, n_terminals = 1000000, nb_days=90, start_date="2018-04-01", r=5):
     
-    start_time=time.time()
-    customer_profiles_table = generate_customer_profiles_table(n_customers, random_state = 0)
-    print("Time to generate customer profiles table: {0:.10}s".format(time.time()-start_time))
     
+    q1,thread1 = enthread(target=generate_customer_profiles_table,args=(n_customers,0))
     start_time=time.time()
-    terminal_profiles_table = generate_terminal_profiles_table(n_terminals, random_state = 1)
+    #customer_profiles_table = generate_customer_profiles_table(n_customers, random_state = 0)
+    
+    terminal_profiles_table=None
+    q2,thread2 = enthread(target=generate_terminal_profiles_table,args=(n_terminals,1))
+    start_time=time.time()
+
+    #terminal_profiles_table = generate_terminal_profiles_table(n_terminals, x = 1)
+    
+    thread1.join()
+    customer_profiles_table=q1.get()
+
+    print("Time to generate customer profiles table: {0:.10}s".format(time.time()-start_time))
+    thread2.join()
+    terminal_profiles_table=q2.get()
     print("Time to generate terminal profiles table: {0:.10}s".format(time.time()-start_time))
     
     start_time=time.time()
@@ -324,9 +335,9 @@ def load_CSV(connection):
 
 
 def clear_DB(connection):
-    c1="""drop CONSTRAINT terminal_id"""
-    c2="""drop CONSTRAINT customer_id"""
-    c3="""DROP CONSTRAINT transaction_id"""
+    c1="""drop CONSTRAINT terminal_id IF EXISTS"""
+    c2="""drop CONSTRAINT customer_id IF EXISTS"""
+    c3="""DROP CONSTRAINT transaction_id IF EXISTS"""
     c4="""match (n) detach delete n"""
 
 
@@ -409,18 +420,21 @@ def print_sizes():
     
 if __name__ == "__main__":
     data_base_connection=GraphDatabase.driver(uri = "bolt://localhost:7687", auth=("neo4j", "1234"))
+    
     clear_DB(data_base_connection)
+    
+    #Generate data and convert it into CSV
     customer_profiles_table, terminal_profiles_table, transactions_df=generate_CSV(1000,100,40)
     
     print_sizes()
     
+    #LOAD SCV into DB
     load_CSV(data_base_connection)
     
 
     # extend dataframe
-    transactions_df = extend_transactions(transactions_df)
+    extend_transactions(transactions_df).to_csv("extended_transactions.csv",index=False)
     
-    transactions_df.to_csv("extended_transactions.csv",index=False)
     #updateDB(data_base_connection)
     fastUpdateDB(data_base_connection)
     #addFrauds_asRequested(data_base_connection) #se fatto prima dell'update usare updateDB invece di fastUpdateDB
