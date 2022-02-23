@@ -26,6 +26,18 @@ sns.set_style('darkgrid', {'axes.facecolor': '0.9'})
 
 path="default/"
 
+
+def timer_func(func):
+    # This function shows the execution time of 
+    # the function object passed
+    def wrap_func(*args, **kwargs):
+        start_time = time.time()
+        result = func(*args, **kwargs)
+        print(f'{func.__name__:<20} {"executed in":^20} {(time.time()-start_time):>.5f}s')
+        return result
+    return wrap_func
+
+
 def generate_customer_profiles_table(n_customers, random_state=0):
     
     np.random.seed(random_state)
@@ -294,10 +306,8 @@ def hour_map(x):
 def extract_period(datetimes):
     return datetimes.apply(lambda x:hour_map(x.hour))
 
-def extend_transactions(df):
-
-    start_time=time.time()
-    
+@timer_func
+def extend_transactions(df):    
     df=df.assign(TX_PERIOD=lambda x: extract_period(x.TX_DATETIME))
     
     typep = ["high-tech", "food", "clothing", "consumable", "other"]
@@ -306,12 +316,10 @@ def extend_transactions(df):
     li = [random.randint(0,4) for x in li]
     li = [typep[x] for x in li]
     df=df.assign(TX_PRODUCT_TYPE=lambda x:pd.Series(li))
-    print("Time to extend transactions:              {0:.10}s".format(time.time()-start_time))
-
     return df
     
 
-    
+@timer_func
 def load_CSV(connection):
     c1=""" CALL apoc.periodic.iterate('
             CALL apoc.load.csv(\\'/Users/pietrobarone/Documents/UniMI/DBMS/Progetto/"""+path+"""customers.csv\\') yield map as row return row','
@@ -334,11 +342,9 @@ def load_CSV(connection):
             ', { parallel:true, concurrency:10000,batchSize:1000});"""
     i3= """ CREATE CONSTRAINT transaction_id FOR (t:Transaction) REQUIRE t.transaction_id IS UNIQUE"""
             
-    start_time=time.time()
     execute([c1,c2,i1,i2,c3,i3],connection)
-    print("Time to load CSV into DB:                 {0:.10}s".format(time.time()-start_time))
 
-
+@timer_func
 def clear_DB(connection):
     c1="""drop CONSTRAINT terminal_id IF EXISTS"""
     c2="""drop CONSTRAINT customer_id IF EXISTS"""
@@ -348,6 +354,7 @@ def clear_DB(connection):
 
     execute([c1,c2,c3,c4],connection)
 
+@timer_func
 def updateDB(connection):
     c=  """ CALL apoc.periodic.iterate('
             CALL apoc.load.csv(\\'/Users/pietrobarone/Documents/UniMI/DBMS/Progetto/"""+path+"""extended_transactions.csv\\') yield map as row return row','
@@ -355,10 +362,9 @@ def updateDB(connection):
             set t.tx_period =row.TX_PERIOD, t.tx_product_type =row.TX_PRODUCT_TYPE
             ', { parallel:true, concurrency:10000,batchSize:1000});"""
     
-    start_time=time.time()
     execute([c],connection)
-    print("Time update DB:                           {0:.10}s".format(time.time()-start_time))
-    
+  
+@timer_func  
 def fastUpdateDB(connection):
     d="""match ()-[r:Transaction]-() detach delete r"""
     c="""   CALL apoc.periodic.iterate('
@@ -369,11 +375,10 @@ def fastUpdateDB(connection):
             return count(*)
             ', { parallel:true, concurrency:10000,batchSize:1000});"""
     
-    start_time=time.time()
     execute([d,c],connection)
-    print("Time to FAST update DB:                   {0:.10}s".format(time.time()-start_time))    
     
     
+@timer_func
 def addFrauds_asRequested(connection):
     c= """  call apoc.periodic.iterate(
     "match ()-[t:Transaction]->(:Terminal)
@@ -386,13 +391,11 @@ def addFrauds_asRequested(connection):
     return t as fraudolentTransaction",
     { parallel:true, concurrency:1000,batchSize:100}
 )"""
-    start_time=time.time()
     execute([c],connection)
-    print("Time to add Frauds:                       {0:.10}s".format(time.time()-start_time))
 
     
+@timer_func
 def set_buying_friends(connection):
-    start_time=time.time()
     threads=[]
     for t in ["high-tech", "food", "clothing", "consumable", "other"]:
         
@@ -415,13 +418,12 @@ def set_buying_friends(connection):
     for t in threads:
         t.join()
     
-    
-    print("Time to set buying friends:               {0:.10}s".format(time.time()-start_time))
+
 
 ## ottimizzazione: al posto che fare una relazione buying friend tra tutti i customer fare una relazione 
 ## buying friend tra il customer e il terminal specificando la categoria come property della relazione
+@timer_func
 def set_buying_friends_optimized(connection):
-    start_time=time.time()
     threads=[]
     for t in ["high-tech", "food", "clothing", "consumable", "other"]:
         
@@ -445,7 +447,10 @@ def set_buying_friends_optimized(connection):
     for t in threads:
         t.join()
     
-    print("Time to set buying friends:               {0:.10}s".format(time.time()-start_time))
+
+
+
+
 
 def print_sizes():
     s1=os.path.getsize(path+"transactions.csv")
@@ -458,6 +463,7 @@ def print_sizes():
     print("TOTAL            "+str((s1+s2+s3)*0.000001 )+" MB")
     print("---------------------------------")
 
+@timer_func
 def create_model(p, n_customers = 100, n_terminals = 100, nb_days=50):
     global path
     path=p
@@ -487,12 +493,12 @@ def create_model(p, n_customers = 100, n_terminals = 100, nb_days=50):
     
     set_buying_friends(data_base_connection)
     data_base_connection.close()
-    
+
 
 if __name__ == "__main__":
     create_model("small/",100,100,4)
-    create_model("medium/",100,100,4)
-    create_model("big/",100,100,4)
+    #create_model("medium/",100,100,4)
+    #create_model("big/",100,100,4)
     
 
     
