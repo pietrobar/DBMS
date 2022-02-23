@@ -31,7 +31,10 @@ In particular, the request for *co-customer-relationships CC of degree k* is a c
 
 Immagine modello logico
 
+### The script
 c. The description of the script for loading the datasets in the chosen NOSQL system
+
+
 
 d. The description of the scripts for the implementation of the required operations
 

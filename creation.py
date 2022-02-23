@@ -397,12 +397,8 @@ def set_buying_friends(connection):
     
     print("Time to set buying friends: {0:.10}s".format(time.time()-start_time))
 
-    
-if __name__ == "__main__":
-    data_base_connection=GraphDatabase.driver(uri = "bolt://localhost:7687", auth=("neo4j", "1234"))
-    clear_DB(data_base_connection)
-    customer_profiles_table, terminal_profiles_table, transactions_df=generate_CSV(1000,100,40)
-    
+
+def print_sizes():
     s1=os.path.getsize("transactions.csv")
     s2=os.path.getsize("customers.csv")
     s3=os.path.getsize("terminals.csv")
@@ -410,6 +406,13 @@ if __name__ == "__main__":
     print("customers.csv "+str((s2)*0.000001 )+" MB")
     print("terminals.csv "+str((s3)*0.000001 )+" MB")
     print("TOTAL "+str((s1+s2+s3)*0.000001 )+" MB")
+    
+if __name__ == "__main__":
+    data_base_connection=GraphDatabase.driver(uri = "bolt://localhost:7687", auth=("neo4j", "1234"))
+    clear_DB(data_base_connection)
+    customer_profiles_table, terminal_profiles_table, transactions_df=generate_CSV(1000,100,40)
+    
+    print_sizes()
     
     load_CSV(data_base_connection)
     
