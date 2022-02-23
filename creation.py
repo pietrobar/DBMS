@@ -388,6 +388,7 @@ def addFrauds_asRequested(connection):
     
 def set_buying_friends(connection):
     start_time=time.time()
+    threads=[]
     for t in ["high-tech", "food", "clothing", "consumable", "other"]:
         
         c="""CALL apoc.periodic.iterate(
@@ -402,8 +403,12 @@ def set_buying_friends(connection):
             RETURN *",
             { parallel:true, concurrency:1000,batchSize:100})
         """
-        execute([c],connection)
+        thread=threading.Thread(target=execute,args=([c],connection))
+        thread.start()
+        threads.append(thread)
     
+    for t in threads:
+        t.join()
     
     
     print("Time to set buying friends: {0:.10}s".format(time.time()-start_time))
