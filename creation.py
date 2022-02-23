@@ -408,6 +408,30 @@ def set_buying_friends(connection):
     
     print("Time to set buying friends: {0:.10}s".format(time.time()-start_time))
 
+## ottimizzazione: al posto che fare una relazione buying friend tra tutti i customer fare una relazione 
+## buying friend tra il customer e il terminal specificando la categoria come property della relazione
+def set_buying_friends_optimized(connection):
+    start_time=time.time()
+    for t in ["high-tech", "food", "clothing", "consumable", "other"]:
+        
+        c="""CALL apoc.periodic.iterate(
+        "MATCH (ter:Terminal) Return ter",
+        "match (t:Terminal{terminal_id:ter.terminal_id})-[tr:Transaction{tx_product_type:'"""+ t +"""'}]-(c:Customer) 
+            with count(tr)as n,c,t 
+            where n>3 
+            with collect(c) as cs,count(c) as c,t
+            where c>1
+            UNWIND cs as c1
+            with c1,t
+            MERGE (c1)-[r:BuyingFriends{product_type:'"""+ t +"""'}]->(t)
+            RETURN *",
+            { parallel:true, concurrency:1000,batchSize:100})
+        """
+        execute([c],connection)
+    
+    
+    
+    print("Time to set buying friends: {0:.10}s".format(time.time()-start_time))
 
 def print_sizes():
     s1=os.path.getsize("transactions.csv")
@@ -424,7 +448,7 @@ if __name__ == "__main__":
     clear_DB(data_base_connection)
     
     #Generate data and convert it into CSV
-    customer_profiles_table, terminal_profiles_table, transactions_df=generate_CSV(1000,100,40)
+    customer_profiles_table, terminal_profiles_table, transactions_df=generate_CSV(1000,100,5)
     
     print_sizes()
     
@@ -442,7 +466,7 @@ if __name__ == "__main__":
 
     
     
-    #set_buying_friends(data_base_connection)
+    set_buying_friends(data_base_connection)
     data_base_connection.close()
 
     
