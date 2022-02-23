@@ -1,4 +1,5 @@
 # Necessary imports for this notebook
+from email.policy import default
 import os
 from unicodedata import name
 from neo4j import GraphDatabase
@@ -23,6 +24,7 @@ import seaborn as sns
 
 sns.set_style('darkgrid', {'axes.facecolor': '0.9'})
 
+path="default/"
 
 def generate_customer_profiles_table(n_customers, random_state=0):
     
@@ -270,9 +272,12 @@ def execute(commands,data_base_connection):
     
 def generate_CSV(n_customers = 100, n_terminals = 100, nb_days=50, start_date="2022-02-20", r=10):
     customer_profiles_table, terminal_profiles_table, transactions_df=generate_dataset_default(n_customers,n_terminals,nb_days,start_date,r)
-    customer_profiles_table.to_csv("customers.csv",index=False)
-    terminal_profiles_table.to_csv("terminals.csv",index=False)
-    transactions_df.to_csv("transactions.csv",index=False)
+    outdir = './'+path
+    if not os.path.exists(outdir):
+        os.mkdir(outdir)
+    customer_profiles_table.to_csv(path+"customers.csv",index=False)
+    terminal_profiles_table.to_csv(path+"terminals.csv",index=False)
+    transactions_df.to_csv(path+"transactions.csv",index=False)
     return (customer_profiles_table, terminal_profiles_table, transactions_df)
  
 def hour_map(x):
@@ -309,19 +314,19 @@ def extend_transactions(df):
     
 def load_CSV(connection):
     c1=""" CALL apoc.periodic.iterate('
-            CALL apoc.load.csv(\\'/Users/pietrobarone/Documents/UniMI/DBMS/Progetto/customers.csv\\') yield map as row return row','
+            CALL apoc.load.csv(\\'/Users/pietrobarone/Documents/UniMI/DBMS/Progetto/"""+path+"""customers.csv\\') yield map as row return row','
             CALL apoc.create.node(["Customer"],{customer_id:row.CUSTOMER_ID, x_customer_id:  row.x_customer_id , y_customer_id: row.y_customer_id, mean_amount: row.mean_amount, std_amount: row.std_amount, mean_nb_tx_per_day: row.mean_nb_tx_per_day}) YIELD node 
                         return count(*)
         ', { parallel:true, concurrency:1000,batchSize:1000});"""
     c2= """ CALL apoc.periodic.iterate('
-            CALL apoc.load.csv(\\'/Users/pietrobarone/Documents/UniMI/DBMS/Progetto/terminals.csv\\') yield map as row return row','
+            CALL apoc.load.csv(\\'/Users/pietrobarone/Documents/UniMI/DBMS/Progetto/"""+path+"""terminals.csv\\') yield map as row return row','
             CALL apoc.create.node(["Terminal"],{terminal_id:row.TERMINAL_ID, x_terminal_id:  row.x_terminal_id , y_terminal_id: row.y_terminal_id}) YIELD node 
             return count(*)
             ', { parallel:true, concurrency:1000,batchSize:1000});"""
     i1= """ CREATE CONSTRAINT customer_id FOR (c:Customer) REQUIRE c.customer_id IS UNIQUE"""
     i2= """ CREATE CONSTRAINT terminal_id FOR (t:Terminal) REQUIRE t.terminal_id IS UNIQUE"""
     c3= """ CALL apoc.periodic.iterate('
-            CALL apoc.load.csv(\\'/Users/pietrobarone/Documents/UniMI/DBMS/Progetto/transactions.csv\\') yield map as row return row','
+            CALL apoc.load.csv(\\'/Users/pietrobarone/Documents/UniMI/DBMS/Progetto/"""+path+"""transactions.csv\\') yield map as row return row','
             MATCH (c:Customer),(t:Terminal)
             WHERE c.customer_id=row.CUSTOMER_ID and t.terminal_id=row.TERMINAL_ID
             CALL apoc.create.relationship(c,"Transaction",{transaction_id:row.TRANSACTION_ID,tx_time_seconds:row.TX_TIME_SECONDS, tx_time_days:row.TX_TIME_DAYS,customer_id:row.CUSTOMER_ID,terminal_id:row.TERMINAL_ID,tx_amount:row.TX_AMOUNT, tx_datetime:datetime({epochmillis: apoc.date.parse(row.TX_DATETIME, "ms", "yyyy-MM-dd HH:mm:ss")}), tx_fraud:row.TX_FRAUD},t) YIELD rel
@@ -345,7 +350,7 @@ def clear_DB(connection):
 
 def updateDB(connection):
     c=  """ CALL apoc.periodic.iterate('
-            CALL apoc.load.csv(\\'/Users/pietrobarone/Documents/UniMI/DBMS/Progetto/extended_transactions.csv\\') yield map as row return row','
+            CALL apoc.load.csv(\\'/Users/pietrobarone/Documents/UniMI/DBMS/Progetto/"""+path+"""extended_transactions.csv\\') yield map as row return row','
             MATCH ()-[t:Transaction {transaction_id: row.TRANSACTION_ID}]-()
             set t.tx_period =row.TX_PERIOD, t.tx_product_type =row.TX_PRODUCT_TYPE
             ', { parallel:true, concurrency:10000,batchSize:1000});"""
@@ -357,7 +362,7 @@ def updateDB(connection):
 def fastUpdateDB(connection):
     d="""match ()-[r:Transaction]-() detach delete r"""
     c="""   CALL apoc.periodic.iterate('
-            CALL apoc.load.csv(\\'/Users/pietrobarone/Documents/UniMI/DBMS/Progetto/extended_transactions.csv\\') yield map as row return row','
+            CALL apoc.load.csv(\\'/Users/pietrobarone/Documents/UniMI/DBMS/Progetto/"""+path+"""extended_transactions.csv\\') yield map as row return row','
             MATCH (c:Customer),(t:Terminal)
             WHERE c.customer_id=row.CUSTOMER_ID and t.terminal_id=row.TERMINAL_ID
             CALL apoc.create.relationship(c,"Transaction",{transaction_id:row.TRANSACTION_ID,tx_time_seconds:row.TX_TIME_SECONDS, tx_time_days:row.TX_TIME_DAYS,customer_id:row.CUSTOMER_ID,terminal_id:row.TERMINAL_ID,tx_amount:row.TX_AMOUNT, tx_datetime:datetime({epochmillis: apoc.date.parse(row.TX_DATETIME, "ms", "yyyy-MM-dd HH:mm:ss")}), tx_fraud:row.TX_FRAUD,tx_period:row.TX_PERIOD, tx_product_type:row.TX_PRODUCT_TYPE},t) YIELD rel
@@ -443,9 +448,9 @@ def set_buying_friends_optimized(connection):
     print("Time to set buying friends:               {0:.10}s".format(time.time()-start_time))
 
 def print_sizes():
-    s1=os.path.getsize("transactions.csv")
-    s2=os.path.getsize("customers.csv")
-    s3=os.path.getsize("terminals.csv")
+    s1=os.path.getsize(path+"transactions.csv")
+    s2=os.path.getsize(path+"customers.csv")
+    s3=os.path.getsize(path+"terminals.csv")
     print("---------------------------------")
     print("transactions.csv "+str((s1)*0.000001 )+" MB")
     print("customers.csv    "+str((s2)*0.000001 )+" MB")
@@ -453,8 +458,10 @@ def print_sizes():
     print("TOTAL            "+str((s1+s2+s3)*0.000001 )+" MB")
     print("---------------------------------")
 
+def create_model(p, n_customers = 100, n_terminals = 100, nb_days=50):
+    global path
+    path=p
     
-if __name__ == "__main__":
     data_base_connection=GraphDatabase.driver(uri = "bolt://localhost:7687", auth=("neo4j", "1234"))
     
     clear_DB(data_base_connection)
@@ -469,7 +476,7 @@ if __name__ == "__main__":
     
 
     # extend dataframe
-    extend_transactions(transactions_df).to_csv("extended_transactions.csv",index=False)
+    extend_transactions(transactions_df).to_csv(path+"extended_transactions.csv",index=False)
     
     #updateDB(data_base_connection)
     fastUpdateDB(data_base_connection)
@@ -480,6 +487,13 @@ if __name__ == "__main__":
     
     set_buying_friends(data_base_connection)
     data_base_connection.close()
+    
+
+if __name__ == "__main__":
+    create_model("small/",100,100,4)
+    create_model("medium/",100,100,4)
+    create_model("big/",100,100,4)
+    
 
     
     
