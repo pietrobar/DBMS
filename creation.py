@@ -241,7 +241,7 @@ def generate_dataset_default(n_customers = 10000, n_terminals = 1000000, nb_days
     #transactions_df=customer_profiles_table.groupby('CUSTOMER_ID').apply(lambda x : generate_transactions_table(x.iloc[0], nb_days=nb_days)).reset_index(drop=True)
     # With Pandarallel
     transactions_df=customer_profiles_table.groupby('CUSTOMER_ID').parallel_apply(lambda x : generate_transactions_table(x.iloc[0], nb_days=nb_days)).reset_index(drop=True)
-    print("Time to generate transactions: {0:.10}s".format(time.time()-start_time))
+    print("Time to generate transactions:            {0:.10}s".format(time.time()-start_time))
     
     # Sort transactions chronologically
     transactions_df=transactions_df.sort_values('TX_DATETIME')
@@ -301,7 +301,7 @@ def extend_transactions(df):
     li = [random.randint(0,4) for x in li]
     li = [typep[x] for x in li]
     df=df.assign(TX_PRODUCT_TYPE=lambda x:pd.Series(li))
-    print("Time to extend transactions with 'tipe of product' and 'period of day': {0:.10}s".format(time.time()-start_time))
+    print("Time to extend transactions:              {0:.10}s".format(time.time()-start_time))
 
     return df
     
@@ -331,7 +331,7 @@ def load_CSV(connection):
             
     start_time=time.time()
     execute([c1,c2,i1,i2,c3,i3],connection)
-    print("Time to load CSV into DB: {0:.10}s".format(time.time()-start_time))
+    print("Time to load CSV into DB:                 {0:.10}s".format(time.time()-start_time))
 
 
 def clear_DB(connection):
@@ -352,7 +352,7 @@ def updateDB(connection):
     
     start_time=time.time()
     execute([c],connection)
-    print("Time update DB: {0:.10}s".format(time.time()-start_time))
+    print("Time update DB:                           {0:.10}s".format(time.time()-start_time))
     
 def fastUpdateDB(connection):
     d="""match ()-[r:Transaction]-() detach delete r"""
@@ -366,7 +366,7 @@ def fastUpdateDB(connection):
     
     start_time=time.time()
     execute([d,c],connection)
-    print("Time to FAST update DB: {0:.10}s".format(time.time()-start_time))    
+    print("Time to FAST update DB:                   {0:.10}s".format(time.time()-start_time))    
     
     
 def addFrauds_asRequested(connection):
@@ -383,7 +383,7 @@ def addFrauds_asRequested(connection):
 )"""
     start_time=time.time()
     execute([c],connection)
-    print("Time to add Frauds: {0:.10}s".format(time.time()-start_time))
+    print("Time to add Frauds:                       {0:.10}s".format(time.time()-start_time))
 
     
 def set_buying_friends(connection):
@@ -411,7 +411,7 @@ def set_buying_friends(connection):
         t.join()
     
     
-    print("Time to set buying friends: {0:.10}s".format(time.time()-start_time))
+    print("Time to set buying friends:               {0:.10}s".format(time.time()-start_time))
 
 ## ottimizzazione: al posto che fare una relazione buying friend tra tutti i customer fare una relazione 
 ## buying friend tra il customer e il terminal specificando la categoria come property della relazione
@@ -440,16 +440,19 @@ def set_buying_friends_optimized(connection):
     for t in threads:
         t.join()
     
-    print("Time to set buying friends: {0:.10}s".format(time.time()-start_time))
+    print("Time to set buying friends:               {0:.10}s".format(time.time()-start_time))
 
 def print_sizes():
     s1=os.path.getsize("transactions.csv")
     s2=os.path.getsize("customers.csv")
     s3=os.path.getsize("terminals.csv")
+    print("---------------------------------")
     print("transactions.csv "+str((s1)*0.000001 )+" MB")
-    print("customers.csv "+str((s2)*0.000001 )+" MB")
-    print("terminals.csv "+str((s3)*0.000001 )+" MB")
-    print("TOTAL "+str((s1+s2+s3)*0.000001 )+" MB")
+    print("customers.csv    "+str((s2)*0.000001 )+" MB")
+    print("terminals.csv    "+str((s3)*0.000001 )+" MB")
+    print("TOTAL            "+str((s1+s2+s3)*0.000001 )+" MB")
+    print("---------------------------------")
+
     
 if __name__ == "__main__":
     data_base_connection=GraphDatabase.driver(uri = "bolt://localhost:7687", auth=("neo4j", "1234"))
