@@ -456,13 +456,13 @@ def print_sizes():
     s1=os.path.getsize(path+"transactions.csv")
     s2=os.path.getsize(path+"customers.csv")
     s3=os.path.getsize(path+"terminals.csv")
-    print("---------------------------------")
-    print("transactions.csv "+str((s1)*0.000001 )+" MB")
-    print("customers.csv    "+str((s2)*0.000001 )+" MB")
-    print("terminals.csv    "+str((s3)*0.000001 )+" MB")
-    print("TOTAL            "+str((s1+s2+s3)*0.000001 )+" MB")
-    print("---------------------------------")
-
+    print("-"*40)
+    print(f'{"transactions.csv ":<20} {str((s1)*0.000001 ):^6} MB')
+    print(f'{"customers.csv ":<20} {str((s2)*0.000001 ):^6} MB')
+    print(f'{"terminals.csv ":<20} {str((s3)*0.000001 ):^6} MB')
+    print(f'{"TOTAL: ":<20} {str((s1+s2+s3)*0.000001 ):^6} MB')
+    print("-"*40)
+    
 @timer_func
 def create_model(p, n_customers = 100, n_terminals = 100, nb_days=50):
     global path
