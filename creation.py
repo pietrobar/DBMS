@@ -264,7 +264,7 @@ def generate_dataset_default(n_customers = 10000, n_terminals = 1000000, nb_days
     transactions_df.reset_index(inplace=True)
     # TRANSACTION_ID are the dataframe indices, starting from 0
     transactions_df.rename(columns = {'index':'TRANSACTION_ID'}, inplace = True)
-    #transactions_df = add_frauds(customer_profiles_table, terminal_profiles_table, transactions_df)
+    transactions_df = add_frauds(customer_profiles_table, terminal_profiles_table, transactions_df)
     return (customer_profiles_table, terminal_profiles_table, transactions_df)
     
 
@@ -429,7 +429,7 @@ def set_buying_friends_dense(connection):
         
 @timer_func
 def set_buying_friends(connection):
-    c="""   MATCH (c1:Customer)-[tx:Transaction]->(t)<-[]-(c2:Customer), 
+    c="""   MATCH (c1:Customer)-[tx:Transaction]-(t)--(c2:Customer), 
             (c1)-[t1:Transaction{tx_product_type: tx.tx_product_type}]->(t), 
             (c2)-[t2:Transaction{tx_product_type: tx.tx_product_type}]->(t) 
             WITH c1, c2, COUNT(DISTINCT t1) AS n1, COUNT(DISTINCT t2) AS n2 
@@ -462,57 +462,19 @@ def query_b(connection):
     execute([c],connection)
    
 @timer_func 
-def query_c(connection):
-    c="""   MATCH path=(a:Customer{customer_id:"4"})-[*6]-(b:Customer) 
+def query_c(connection, customer_id=4, degree=3):
+    degree=degree*2
+    c="""   MATCH path=(a:Customer{customer_id:"""+str(customer_id)+"""})-[*"""+str(degree)+"""]-(b:Customer) 
             where  apoc.coll.duplicates(NODES(path)) = [] 
             return DISTINCT b limit 50"""
     execute([c],connection)
     
 @timer_func
 def query_e(connection):
-    c1="""  CALL {
-                match ()-[t:Transaction]-() return distinct(t.tx_period) as label
-            }
-            match ()-[t:Transaction{tx_period:label}]-() return t.tx_period,count(t)"""
-    c2="""  CALL {
-                match ()-[t:Transaction]-() return distinct(t.tx_period) as label
-            }
-            match ()-[t:Transaction{tx_period:label}]-() 
-            with t.tx_period as p,sum(toInteger(t.tx_fraud)) as s
-            return avg(s)"""
-    execute([c1,c2],connection)  
-
-
-
-## ottimizzazione: al posto che fare una relazione buying friend tra tutti i customer fare una relazione 
-## buying friend tra il customer e il terminal specificando la categoria come property della relazione
-@timer_func
-def set_buying_friends_optimized(connection):
-    threads=[]
-    for t in ["high-tech", "food", "clothing", "consumable", "other"]:
-        
-        c="""CALL apoc.periodic.iterate(
-        "MATCH (ter:Terminal) Return ter",
-        "match (t:Terminal{terminal_id:ter.terminal_id})-[tr:Transaction{tx_product_type:'"""+ t +"""'}]-(c:Customer) 
-            with count(tr)as n,c,t 
-            where n>3 
-            with collect(c) as cs,count(c) as c,t
-            where c>1
-            UNWIND cs as c1
-            with c1,t
-            MERGE (c1)-[r:BuyingFriend{product_type:'"""+ t +"""'}]->(t)
-            RETURN *",
-            { parallel:true, concurrency:1000,batchSize:100})
-        """
-        thread=threading.Thread(target=execute,args=([c],connection))
-        thread.start()
-        threads.append(thread)
-    
-    for t in threads:
-        t.join()
-    
-
-
+    c1="""  MATCH ()-[t:Transaction]->()
+            RETURN t.tx_period, count(t) as number_of_transactions, 
+            count(CASE WHEN t.tx_fraud = "1" THEN 1 END) as number_of_fraud_transactions"""
+    execute([c1],connection)  
 
 
 
@@ -533,7 +495,6 @@ def create_model(p, data_base_connection, n_customers = 100, n_terminals = 100, 
     path=p
     
     
-    
     #Generate data and convert it into CSV
     customer_profiles_table, terminal_profiles_table, transactions_df=generate_CSV(n_customers,n_terminals,nb_days)
     
@@ -546,16 +507,13 @@ def create_model(p, data_base_connection, n_customers = 100, n_terminals = 100, 
     query_b(data_base_connection)
     query_c(data_base_connection)
     
-    
-
     # extend dataframe
     extend_transactions(transactions_df).to_csv(path+"extended_transactions.csv",index=False)
-    
     #updateDB(data_base_connection)
     fastUpdateDB(data_base_connection)
     
     #addFraud_asRequested(data_base_connection) #se fatto prima dell'update usare updateDB invece di fastUpdateDB
-    set_buying_friends_optimized(data_base_connection)
+    set_buying_friends(data_base_connection)
     
     query_e(data_base_connection)
 
@@ -568,7 +526,7 @@ def create_model(p, data_base_connection, n_customers = 100, n_terminals = 100, 
 if __name__ == "__main__":
     data_base_connection=GraphDatabase.driver(uri = "bolt://localhost:7687", auth=("neo4j", "1234"))
     clear_DB(data_base_connection)
-    create_model("small/",data_base_connection,1000,1000,20)
+    create_model("small/",data_base_connection,10,10,3)
     # clear_DB(data_base_connection)
     # create_model("medium/",data_base_connection,100,1000,5)
     # clear_DB(data_base_connection)
