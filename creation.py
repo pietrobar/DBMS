@@ -33,7 +33,7 @@ def timer_func(func):
     def wrap_func(*args, **kwargs):
         start_time = time.time()
         result = func(*args, **kwargs)
-        print(f'{func.__name__:<20} {"executed in":^20} {(time.time()-start_time):>.5f}s')
+        print(f'{func.__name__:<35} {"executed in":^20} {(time.time()-start_time):>.5f}s')
         return result
     return wrap_func
 
@@ -349,10 +349,19 @@ def clear_DB(connection):
     c1="""drop CONSTRAINT terminal_id IF EXISTS"""
     c2="""drop CONSTRAINT customer_id IF EXISTS"""
     c3="""DROP CONSTRAINT transaction_id IF EXISTS"""
-    c4="""match (n) detach delete n"""
+    c4="""  CALL apoc.periodic.iterate(
+            'MATCH ()-[r]->() RETURN id(r) AS id', 
+            'MATCH ()-[r]->() WHERE id(r)=id DELETE r', 
+            {batchSize: 10000});"""
+    c5="""  CALL apoc.periodic.iterate(
+            'MATCH (n) RETURN id(n) AS id', 
+            'MATCH (n) WHERE id(n)=id DELETE n', 
+            {batchSize: 10000});"""
 
 
-    execute([c1,c2,c3,c4],connection)
+
+
+    execute([c1,c2,c3,c4,c5],connection)
 
 @timer_func
 def updateDB(connection):
@@ -379,23 +388,23 @@ def fastUpdateDB(connection):
     
     
 @timer_func
-def addFrauds_asRequested(connection):
+def addFraud_asRequested(connection):
     c= """  call apoc.periodic.iterate(
-    "match ()-[t:Transaction]->(:Terminal)
-            with datetime() as today,t
-            where toInteger(apoc.date.format(today.epochMillis-t.tx_datetime.epochMillis,\\"ms\\", \\"dd\\"))<31
-            with t.terminal_id as tid,avg(toInteger(t.tx_amount)) as avg return tid,avg",
-    "match ()-[t:Transaction]-()
-    where t.terminal_id = tid and toInteger(t.tx_amount)>avg+avg/2
-    SET t.tx_fraud=\\"1\\"
-    return t as fraudolentTransaction",
-    { parallel:true, concurrency:1000,batchSize:100}
-)"""
+            "match ()-[t:Transaction]->(:Terminal)
+                    with datetime() as today,t
+                    where toInteger(apoc.date.format(today.epochMillis-t.tx_datetime.epochMillis,\\"ms\\", \\"dd\\"))<31
+                    with t.terminal_id as tid,avg(toInteger(t.tx_amount)) as avg return tid,avg",
+            "match ()-[t:Transaction]-()
+            where t.terminal_id = tid and toInteger(t.tx_amount)>avg+avg/2
+            SET t.tx_fraud=\\"1\\"
+            return t as fraudolentTransaction",
+            { parallel:true, concurrency:1000,batchSize:100}
+            )"""
     execute([c],connection)
 
     
 @timer_func
-def set_buying_friends(connection):
+def set_buying_friends_dense(connection):
     threads=[]
     for t in ["high-tech", "food", "clothing", "consumable", "other"]:
         
@@ -407,7 +416,7 @@ def set_buying_friends(connection):
             UNWIND cs as c2
             with c1,c2
             where c1<>c2
-            MERGE (c1)-[r:BuyingFriends]->(c2)
+            MERGE (c1)-[r:BuyingFriend]->(c2)
             RETURN *",
             { parallel:true, concurrency:1000,batchSize:100})
         """
@@ -417,7 +426,62 @@ def set_buying_friends(connection):
     
     for t in threads:
         t.join()
+        
+@timer_func
+def set_buying_friends(connection):
+    c="""   MATCH (c1:Customer)-[tx:Transaction]->(t)<-[]-(c2:Customer), 
+            (c1)-[t1:Transaction{tx_product_type: tx.tx_product_type}]->(t), 
+            (c2)-[t2:Transaction{tx_product_type: tx.tx_product_type}]->(t) 
+            WITH c1, c2, COUNT(DISTINCT t1) AS n1, COUNT(DISTINCT t2) AS n2 
+            WHERE c1.customer_id > c2.customer_id AND n1 > 3 AND n2 > 3 
+            MERGE (c1)-[:BuyingFriend]->(c2)"""
+    execute([c],connection)
+
     
+@timer_func
+def query_a(connection):
+    c="""   with datetime() as today
+            match (c:Customer)-[t:Transaction]->(:Terminal)
+            where t.tx_datetime.year = today.year and t.tx_datetime.month = today.month
+            return c.customer_id, t.tx_time_days,sum(toInteger(t.tx_amount)) order by c.customer_id, t.tx_time_days"""
+    execute([c],connection)
+  
+@timer_func  
+def query_b(connection):
+    c="""   match ()-[t:Transaction]->(:Terminal)
+            with datetime() as today,t
+            where toInteger(apoc.date.format(today.epochMillis-t.tx_datetime.epochMillis,"ms", "dd"))<31
+            with t.terminal_id as tid,avg(toInteger(t.tx_amount)) as avg
+            CALL{
+                with tid,avg
+                match ()-[t:Transaction]-()
+                where t.terminal_id = tid and toInteger(t.tx_amount)>(avg+avg/2)
+                return t as fraudolentTransaction
+            }
+            return fraudolentTransaction"""
+    execute([c],connection)
+   
+@timer_func 
+def query_c(connection):
+    c="""   MATCH path=(a:Customer{customer_id:"4"})-[*6]-(b:Customer) 
+            where  apoc.coll.duplicates(NODES(path)) = [] 
+            return DISTINCT b limit 50"""
+    execute([c],connection)
+    
+@timer_func
+def query_e(connection):
+    c1="""  CALL {
+                match ()-[t:Transaction]-() return distinct(t.tx_period) as label
+            }
+            match ()-[t:Transaction{tx_period:label}]-() return t.tx_period,count(t)"""
+    c2="""  CALL {
+                match ()-[t:Transaction]-() return distinct(t.tx_period) as label
+            }
+            match ()-[t:Transaction{tx_period:label}]-() 
+            with t.tx_period as p,sum(toInteger(t.tx_fraud)) as s
+            return avg(s)"""
+    execute([c1,c2],connection)  
+
 
 
 ## ottimizzazione: al posto che fare una relazione buying friend tra tutti i customer fare una relazione 
@@ -436,7 +500,7 @@ def set_buying_friends_optimized(connection):
             where c>1
             UNWIND cs as c1
             with c1,t
-            MERGE (c1)-[r:BuyingFriends{product_type:'"""+ t +"""'}]->(t)
+            MERGE (c1)-[r:BuyingFriend{product_type:'"""+ t +"""'}]->(t)
             RETURN *",
             { parallel:true, concurrency:1000,batchSize:100})
         """
@@ -464,21 +528,24 @@ def print_sizes():
     print("-"*40)
     
 @timer_func
-def create_model(p, n_customers = 100, n_terminals = 100, nb_days=50):
+def create_model(p, data_base_connection, n_customers = 100, n_terminals = 100, nb_days=50):
     global path
     path=p
     
-    data_base_connection=GraphDatabase.driver(uri = "bolt://localhost:7687", auth=("neo4j", "1234"))
     
-    clear_DB(data_base_connection)
     
     #Generate data and convert it into CSV
-    customer_profiles_table, terminal_profiles_table, transactions_df=generate_CSV(1000,100,5)
+    customer_profiles_table, terminal_profiles_table, transactions_df=generate_CSV(n_customers,n_terminals,nb_days)
     
     print_sizes()
     
-    #LOAD SCV into DB
+    #LOAD CSV into DB
     load_CSV(data_base_connection)
+    
+    query_a(data_base_connection)
+    query_b(data_base_connection)
+    query_c(data_base_connection)
+    
     
 
     # extend dataframe
@@ -486,19 +553,27 @@ def create_model(p, n_customers = 100, n_terminals = 100, nb_days=50):
     
     #updateDB(data_base_connection)
     fastUpdateDB(data_base_connection)
-    #addFrauds_asRequested(data_base_connection) #se fatto prima dell'update usare updateDB invece di fastUpdateDB
-
+    
+    #addFraud_asRequested(data_base_connection) #se fatto prima dell'update usare updateDB invece di fastUpdateDB
+    set_buying_friends_optimized(data_base_connection)
+    
+    query_e(data_base_connection)
 
     
     
-    set_buying_friends(data_base_connection)
-    data_base_connection.close()
+    
+    
 
 
 if __name__ == "__main__":
-    create_model("small/",100,100,4)
-    #create_model("medium/",100,100,4)
-    #create_model("big/",100,100,4)
+    data_base_connection=GraphDatabase.driver(uri = "bolt://localhost:7687", auth=("neo4j", "1234"))
+    clear_DB(data_base_connection)
+    create_model("small/",data_base_connection,1000,1000,20)
+    # clear_DB(data_base_connection)
+    # create_model("medium/",data_base_connection,100,1000,5)
+    # clear_DB(data_base_connection)
+    # create_model("big/",data_base_connection,100,1000,10)
+    data_base_connection.close()
     
 
     
