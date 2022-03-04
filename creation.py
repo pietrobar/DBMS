@@ -323,12 +323,21 @@ def extend_transactions(df):
 def load_CSV(connection):
     c1=""" CALL apoc.periodic.iterate('
             CALL apoc.load.csv(\\'/Users/pietrobarone/Documents/UniMI/DBMS/Progetto/"""+path+"""customers.csv\\') yield map as row return row','
-            CALL apoc.create.node(["Customer"],{customer_id:row.CUSTOMER_ID, x_customer_id:  row.x_customer_id , y_customer_id: row.y_customer_id, mean_amount: row.mean_amount, std_amount: row.std_amount, mean_nb_tx_per_day: row.mean_nb_tx_per_day}) YIELD node 
-                        return count(*)
+            CALL apoc.create.node(["Customer"],
+            {customer_id: toInteger(row.CUSTOMER_ID), 
+            x_customer_id:  toFloat(row.x_customer_id) , 
+            y_customer_id: toFloat(row.y_customer_id), 
+            mean_amount: toFloat(row.mean_amount), 
+            std_amount: toFloat(row.std_amount), 
+            mean_nb_tx_per_day: toFloat(row.mean_nb_tx_per_day)}) YIELD node 
+            return count(*)
         ', { parallel:true, concurrency:1000,batchSize:1000});"""
     c2= """ CALL apoc.periodic.iterate('
             CALL apoc.load.csv(\\'/Users/pietrobarone/Documents/UniMI/DBMS/Progetto/"""+path+"""terminals.csv\\') yield map as row return row','
-            CALL apoc.create.node(["Terminal"],{terminal_id:row.TERMINAL_ID, x_terminal_id:  row.x_terminal_id , y_terminal_id: row.y_terminal_id}) YIELD node 
+            CALL apoc.create.node(["Terminal"],
+            {terminal_id:   toInteger(row.TERMINAL_ID), 
+            x_terminal_id:  toFloat(row.x_terminal_id) , 
+            y_terminal_id:  toFloat(row.y_terminal_id)}) YIELD node 
             return count(*)
             ', { parallel:true, concurrency:1000,batchSize:1000});"""
     i1= """ CREATE CONSTRAINT customer_id FOR (c:Customer) REQUIRE c.customer_id IS UNIQUE"""
@@ -337,7 +346,15 @@ def load_CSV(connection):
             CALL apoc.load.csv(\\'/Users/pietrobarone/Documents/UniMI/DBMS/Progetto/"""+path+"""transactions.csv\\') yield map as row return row','
             MATCH (c:Customer),(t:Terminal)
             WHERE c.customer_id=row.CUSTOMER_ID and t.terminal_id=row.TERMINAL_ID
-            CALL apoc.create.relationship(c,"Transaction",{transaction_id:row.TRANSACTION_ID,tx_time_seconds:row.TX_TIME_SECONDS, tx_time_days:row.TX_TIME_DAYS,customer_id:row.CUSTOMER_ID,terminal_id:row.TERMINAL_ID,tx_amount:row.TX_AMOUNT, tx_datetime:datetime({epochmillis: apoc.date.parse(row.TX_DATETIME, "ms", "yyyy-MM-dd HH:mm:ss")}), tx_fraud:row.TX_FRAUD},t) YIELD rel
+            CALL apoc.create.relationship(c,"Transaction",
+            {transaction_id:toInteger(row.TRANSACTION_ID),
+            tx_time_seconds:toInteger(row.TX_TIME_SECONDS),
+            tx_time_days:toInteger(row.TX_TIME_DAYS),
+            customer_id:toInteger(row.CUSTOMER_ID),
+            terminal_id:toInteger(row.TERMINAL_ID),
+            tx_amount:toFloat(row.TX_AMOUNT),
+            tx_datetime:datetime({epochmillis: apoc.date.parse(row.TX_DATETIME, "ms", "yyyy-MM-dd HH:mm:ss")}), 
+            tx_fraud:toInteger(row.TX_FRAUD)},t) YIELD rel
             return count(*)
             ', { parallel:true, concurrency:10000,batchSize:1000});"""
     i3= """ CREATE CONSTRAINT transaction_id FOR (t:Transaction) REQUIRE t.transaction_id IS UNIQUE"""
@@ -380,7 +397,17 @@ def fastUpdateDB(connection):
             CALL apoc.load.csv(\\'/Users/pietrobarone/Documents/UniMI/DBMS/Progetto/"""+path+"""extended_transactions.csv\\') yield map as row return row','
             MATCH (c:Customer),(t:Terminal)
             WHERE c.customer_id=row.CUSTOMER_ID and t.terminal_id=row.TERMINAL_ID
-            CALL apoc.create.relationship(c,"Transaction",{transaction_id:row.TRANSACTION_ID,tx_time_seconds:row.TX_TIME_SECONDS, tx_time_days:row.TX_TIME_DAYS,customer_id:row.CUSTOMER_ID,terminal_id:row.TERMINAL_ID,tx_amount:row.TX_AMOUNT, tx_datetime:datetime({epochmillis: apoc.date.parse(row.TX_DATETIME, "ms", "yyyy-MM-dd HH:mm:ss")}), tx_fraud:row.TX_FRAUD,tx_period:row.TX_PERIOD, tx_product_type:row.TX_PRODUCT_TYPE},t) YIELD rel
+            CALL apoc.create.relationship(c,"Transaction",
+            {transaction_id:toInteger(row.TRANSACTION_ID),
+            tx_time_seconds:toInteger(row.TX_TIME_SECONDS),
+            tx_time_days:toInteger(row.TX_TIME_DAYS),
+            customer_id:toInteger(row.CUSTOMER_ID),
+            terminal_id:toInteger(row.TERMINAL_ID),
+            tx_amount:toFloat(row.TX_AMOUNT),
+            tx_datetime:datetime({epochmillis: apoc.date.parse(row.TX_DATETIME, "ms", "yyyy-MM-dd HH:mm:ss")}), 
+            tx_fraud:toInteger(row.TX_FRAUD),
+            tx_period:row.TX_PERIOD, 
+            tx_product_type:row.TX_PRODUCT_TYPE},t) YIELD rel
             return count(*)
             ', { parallel:true, concurrency:10000,batchSize:1000});"""
     
@@ -393,10 +420,10 @@ def addFraud_asRequested(connection):
             "match ()-[t:Transaction]->(:Terminal)
                     with datetime() as today,t
                     where toInteger(apoc.date.format(today.epochMillis-t.tx_datetime.epochMillis,\\"ms\\", \\"dd\\"))<31
-                    with t.terminal_id as tid,avg(toInteger(t.tx_amount)) as avg return tid,avg",
+                    with t.terminal_id as tid,avg(t.tx_amount) as avg return tid,avg",
             "match ()-[t:Transaction]-()
-            where t.terminal_id = tid and toInteger(t.tx_amount)>avg+avg/2
-            SET t.tx_fraud=\\"1\\"
+            where t.terminal_id = tid and t.tx_amount>avg+avg/2
+            SET t.tx_fraud=1
             return t as fraudolentTransaction",
             { parallel:true, concurrency:1000,batchSize:100}
             )"""
@@ -443,7 +470,7 @@ def query_a(connection):
     c="""   with datetime() as today
             match (c:Customer)-[t:Transaction]->(:Terminal)
             where t.tx_datetime.year = today.year and t.tx_datetime.month = today.month
-            return c.customer_id, t.tx_time_days,sum(toInteger(t.tx_amount)) order by c.customer_id, t.tx_time_days"""
+            return c.customer_id, t.tx_time_days,sum(t.tx_amount) order by c.customer_id, t.tx_time_days"""
     execute([c],connection)
   
 @timer_func  
@@ -451,11 +478,11 @@ def query_b(connection):
     c="""   match ()-[t:Transaction]->(:Terminal)
             with datetime() as today,t
             where toInteger(apoc.date.format(today.epochMillis-t.tx_datetime.epochMillis,"ms", "dd"))<31
-            with t.terminal_id as tid,avg(toInteger(t.tx_amount)) as avg
+            with t.terminal_id as tid,avg(t.tx_amount) as avg
             CALL{
                 with tid,avg
                 match ()-[t:Transaction]-()
-                where t.terminal_id = tid and toInteger(t.tx_amount)>(avg+avg/2)
+                where t.terminal_id = tid and t.tx_amount>(avg+avg/2)
                 return t as fraudolentTransaction
             }
             return fraudolentTransaction"""
@@ -473,7 +500,7 @@ def query_c(connection, customer_id=4, degree=3):
 def query_e(connection):
     c1="""  MATCH ()-[t:Transaction]->()
             RETURN t.tx_period, count(t) as number_of_transactions, 
-            count(CASE WHEN t.tx_fraud = "1" THEN 1 END) as number_of_fraud_transactions"""
+            count(CASE WHEN t.tx_fraud = 1 THEN 1 END) as number_of_fraud_transactions"""
     execute([c1],connection)  
 
 
