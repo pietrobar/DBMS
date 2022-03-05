@@ -25,7 +25,7 @@ import seaborn as sns
 sns.set_style('darkgrid', {'axes.facecolor': '0.9'})
 
 path="default/"
-base="/Users/pietrobarone/Documents/UniMI/DBMS/Progetto/"
+base="/Users/pietrobarone/Documents/UniMI/DBMS/Progetto/"#set global path
 
 def timer_func(func):
     # This function shows the execution time of 
