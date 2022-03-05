@@ -271,7 +271,24 @@ def extend_transactions(df):
     li = [typep[x] for x in li]
     df=df.assign(TX_PRODUCT_TYPE=lambda x:pd.Series(li))
     df.to_csv(path+"extended_transactions.csv",index=False)
+    
+@timer_func
+def extend_transactions_base(connection):
 
+    period = ['morning', 'afternoon', 'evening', 'night']
+    typep = ['high-tech', 'food', 'clothing', 'consumable', 'other']
+    
+    session = connection.session()   
+    transactions = session.run("MATCH ()-[t:Transaction]->() RETURN t.transaction_id").values()
+    
+    for i in range(0,len(transactions)):
+        tx_period = period[random.randint(0,len(period)-1)]
+        tx_product_type = typep[random.randint(0,len(typep)-1)]
+        c="""   MATCH ()-[t:Transaction {transaction_id : """+str(transactions[i][0])+"""}]-() 
+                SET t.tx_period = '"""+tx_period+"""', 
+                t.tx_product_type = '"""+tx_product_type+"""'
+            """
+        session.run(c)
     
 
 @timer_func
@@ -400,7 +417,7 @@ def set_buying_friends_iterate(connection):
         
 @timer_func
 def set_buying_friends(connection):
-
+    session = connection.session()
     for t in ["high-tech", "food", "clothing", "consumable", "other"]:
         c="""   
                 MATCH (c1)-[t1:Transaction{tx_product_type: '"""+t+"""'}]->(t)<- 
@@ -409,7 +426,7 @@ def set_buying_friends(connection):
                 WHERE c1.customer_id > c2.customer_id AND n1 > 3 AND n2 > 3
                 MERGE (c1)-[:BUYING_FRIEND]->(c2)
         """
-        execute([c],connection)
+        session.run(c)
 
 
 
@@ -486,7 +503,9 @@ def create_model(p, data_base_connection, n_customers = 100, n_terminals = 100, 
     # extend dataframe
     extend_transactions(transactions_df)#crea il csv
     updateDB(data_base_connection)
-    #fastUpdateDB(data_base_connection)
+    # fastUpdateDB(data_base_connection)
+    
+    #extend_transactions_base(data_base_connection)
     
     set_buying_friends(data_base_connection)
     
