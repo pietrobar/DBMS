@@ -25,7 +25,7 @@ import seaborn as sns
 sns.set_style('darkgrid', {'axes.facecolor': '0.9'})
 
 path="default/"
-
+base="/Users/pietrobarone/Documents/UniMI/DBMS/Progetto/"
 
 def timer_func(func):
     # This function shows the execution time of 
@@ -277,7 +277,7 @@ def extend_transactions(df):
 @timer_func
 def load_CSV(connection):
     c1=""" CALL apoc.periodic.iterate('
-            CALL apoc.load.csv(\\'/Users/pietrobarone/Documents/UniMI/DBMS/Progetto/"""+path+"""customers.csv\\') yield map as row return row','
+            CALL apoc.load.csv(\\'"""+base+path+"""customers.csv\\') yield map as row return row','
             CALL apoc.create.node(["Customer"],
             {customer_id: toInteger(row.CUSTOMER_ID), 
             x_customer_id:  toFloat(row.x_customer_id) , 
@@ -288,7 +288,7 @@ def load_CSV(connection):
             return count(*)
         ', { parallel:true, concurrency:1000,batchSize:1000});"""
     c2= """ CALL apoc.periodic.iterate('
-            CALL apoc.load.csv(\\'/Users/pietrobarone/Documents/UniMI/DBMS/Progetto/"""+path+"""terminals.csv\\') yield map as row return row','
+            CALL apoc.load.csv(\\'"""+base+path+"""terminals.csv\\') yield map as row return row','
             CALL apoc.create.node(["Terminal"],
             {terminal_id:   toInteger(row.TERMINAL_ID), 
             x_terminal_id:  toFloat(row.x_terminal_id) , 
@@ -298,7 +298,7 @@ def load_CSV(connection):
     i1= """ CREATE CONSTRAINT customer_id FOR (c:Customer) REQUIRE c.customer_id IS UNIQUE"""
     i2= """ CREATE CONSTRAINT terminal_id FOR (t:Terminal) REQUIRE t.terminal_id IS UNIQUE"""
     c3= """ CALL apoc.periodic.iterate('
-            CALL apoc.load.csv(\\'/Users/pietrobarone/Documents/UniMI/DBMS/Progetto/"""+path+"""transactions.csv\\') yield map as row return row','
+            CALL apoc.load.csv(\\'"""+base+path+"""transactions.csv\\') yield map as row return row','
             MATCH (c:Customer),(t:Terminal)
             WHERE c.customer_id=toInteger(row.CUSTOMER_ID) and t.terminal_id=toInteger(row.TERMINAL_ID)
             CALL apoc.create.relationship(c,"Transaction",
@@ -335,7 +335,7 @@ def clear_DB(connection):
 @timer_func
 def updateDB(connection):
     c=  """ CALL apoc.periodic.iterate('
-            CALL apoc.load.csv(\\'/Users/pietrobarone/Documents/UniMI/DBMS/Progetto/"""+path+"""extended_transactions.csv\\') yield map as row return row','
+            CALL apoc.load.csv(\\'"""+base+path+"""extended_transactions.csv\\') yield map as row return row','
             MATCH ()-[t:Transaction {transaction_id: toInteger(row.TRANSACTION_ID)}]-()
             set t.tx_period =row.TX_PERIOD, t.tx_product_type =row.TX_PRODUCT_TYPE
             ', { parallel:true, concurrency:10000,batchSize:1000});"""
@@ -346,7 +346,7 @@ def updateDB(connection):
 def fastUpdateDB(connection):
     d="""match ()-[r:Transaction]-() detach delete r"""
     c="""   CALL apoc.periodic.iterate('
-            CALL apoc.load.csv(\\'/Users/pietrobarone/Documents/UniMI/DBMS/Progetto/"""+path+"""extended_transactions.csv\\') yield map as row return row','
+            CALL apoc.load.csv(\\'"""+base+path+"""extended_transactions.csv\\') yield map as row return row','
             MATCH (c:Customer),(t:Terminal)
             WHERE c.customer_id=toInteger(row.CUSTOMER_ID) and t.terminal_id=toInteger(row.TERMINAL_ID)
             CALL apoc.create.relationship(c,"Transaction",
@@ -479,14 +479,14 @@ def create_model(p, data_base_connection, n_customers = 100, n_terminals = 100, 
     #LOAD CSV into DB
     load_CSV(data_base_connection)
     
-    # query_a(data_base_connection)
-    # query_b(data_base_connection)
-    # query_c(data_base_connection)
+    query_a(data_base_connection)
+    query_b(data_base_connection)
+    query_c(data_base_connection)
     
     # extend dataframe
     extend_transactions(transactions_df)#crea il csv
-    #updateDB(data_base_connection)
-    fastUpdateDB(data_base_connection)
+    updateDB(data_base_connection)
+    #fastUpdateDB(data_base_connection)
     
     set_buying_friends(data_base_connection)
     
@@ -501,11 +501,11 @@ def create_model(p, data_base_connection, n_customers = 100, n_terminals = 100, 
 if __name__ == "__main__":
     data_base_connection=GraphDatabase.driver(uri = "bolt://localhost:7687", auth=("neo4j", "1234"))
     clear_DB(data_base_connection)
-    create_model("small/",data_base_connection,100,100,160)
-    # clear_DB(data_base_connection)
-    # create_model("medium/",data_base_connection,5000,10000,160)
-    # clear_DB(data_base_connection)
-    # create_model("big/",data_base_connection,10000,10000,160)
+    create_model("small/",data_base_connection,9000,1000,35)
+    clear_DB(data_base_connection)
+    create_model("medium/",data_base_connection,5000,10000,160)
+    clear_DB(data_base_connection)
+    create_model("big/",data_base_connection,10000,10000,160)
     data_base_connection.close()
     
 
