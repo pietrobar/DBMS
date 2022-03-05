@@ -67,7 +67,6 @@ def generate_customer_profiles_table(n_customers, random_state=0):
     
     return customer_profiles_table
 
-
 def generate_terminal_profiles_table(n_terminals, random_state=0):
     
     np.random.seed(random_state)
@@ -163,57 +162,12 @@ def generate_transactions_table(customer_profile, start_date = "2022-03-03", nb_
     
 
 @timer_func
-def add_frauds(customer_profiles_table, terminal_profiles_table, transactions_df):
+def add_frauds(transactions_df):
     
-    # By default, all transactions are genuine
-    transactions_df['TX_FRAUD']=0
-    transactions_df['TX_FRAUD_SCENARIO']=0
-    
-    # Scenario 1
-    transactions_df.loc[transactions_df.TX_AMOUNT>220, 'TX_FRAUD']=1
-    transactions_df.loc[transactions_df.TX_AMOUNT>220, 'TX_FRAUD_SCENARIO']=1
-    nb_frauds_scenario_1=transactions_df.TX_FRAUD.sum()
-    print("Number of frauds from scenario 1: "+str(nb_frauds_scenario_1))
-    
-    # Scenario 2
-    for day in range(transactions_df.TX_TIME_DAYS.max()):
-        
-        compromised_terminals = terminal_profiles_table.TERMINAL_ID.sample(n=2, random_state=day)
-        
-        compromised_transactions=transactions_df[(transactions_df.TX_TIME_DAYS>=day) & 
-                                                    (transactions_df.TX_TIME_DAYS<day+28) & 
-                                                    (transactions_df.TERMINAL_ID.isin(compromised_terminals))]
-                            
-        transactions_df.loc[compromised_transactions.index,'TX_FRAUD']=1
-        transactions_df.loc[compromised_transactions.index,'TX_FRAUD_SCENARIO']=2
-    
-    nb_frauds_scenario_2=transactions_df.TX_FRAUD.sum()-nb_frauds_scenario_1
-    print("Number of frauds from scenario 2: "+str(nb_frauds_scenario_2))
-    
-    # Scenario 3
-    for day in range(transactions_df.TX_TIME_DAYS.max()):
-        
-        compromised_customers = customer_profiles_table.CUSTOMER_ID.sample(n=3, random_state=day).values
-        
-        compromised_transactions=transactions_df[(transactions_df.TX_TIME_DAYS>=day) & 
-                                                    (transactions_df.TX_TIME_DAYS<day+14) & 
-                                                    (transactions_df.CUSTOMER_ID.isin(compromised_customers))]
-        
-        nb_compromised_transactions=len(compromised_transactions)
-        
-        
-        random.seed(day)
-        index_fauds = random.sample(list(compromised_transactions.index.values),k=int(nb_compromised_transactions/3))
-        
-        transactions_df.loc[index_fauds,'TX_AMOUNT']=transactions_df.loc[index_fauds,'TX_AMOUNT']*5
-        transactions_df.loc[index_fauds,'TX_FRAUD']=1
-        transactions_df.loc[index_fauds,'TX_FRAUD_SCENARIO']=3
-        
-                             
-    nb_frauds_scenario_3=transactions_df.TX_FRAUD.sum()-nb_frauds_scenario_2-nb_frauds_scenario_1
-    print("Number of frauds from scenario 3: "+str(nb_frauds_scenario_3))
-    
-    return transactions_df                 
+    #random frauds
+    transactions_df['TX_FRAUD']=random.randint(0,1) == 1
+    return transactions_df  
+               
 def enthread(target, args):
     q = queue.Queue()
     def wrapper():
@@ -238,10 +192,10 @@ def generate_dataset_default(n_customers = 10000, n_terminals = 1000000, nb_days
     thread1.join()
     customer_profiles_table=q1.get()
 
-    print("Time to generate customer profiles table: {0:.10}s".format(time.time()-start_time))
+    print("Time to generate customer profiles table: {0:.10}s   Number of elements:".format(time.time()-start_time), len(customer_profiles_table))
     thread2.join()
     terminal_profiles_table=q2.get()
-    print("Time to generate terminal profiles table: {0:.10}s".format(time.time()-start_time))
+    print("Time to generate terminal profiles table: {0:.10}s   Number of elements:".format(time.time()-start_time), len(terminal_profiles_table))
     
     start_time=time.time()
     x_y_terminals = terminal_profiles_table[['x_terminal_id','y_terminal_id']].values.astype(float)
@@ -255,7 +209,7 @@ def generate_dataset_default(n_customers = 10000, n_terminals = 1000000, nb_days
     #transactions_df=customer_profiles_table.groupby('CUSTOMER_ID').apply(lambda x : generate_transactions_table(x.iloc[0], nb_days=nb_days)).reset_index(drop=True)
     # With Pandarallel
     transactions_df=customer_profiles_table.groupby('CUSTOMER_ID').parallel_apply(lambda x : generate_transactions_table(x.iloc[0], nb_days=nb_days)).reset_index(drop=True)
-    print("Time to generate transactions:            {0:.10}s".format(time.time()-start_time))
+    print("Time to generate transactions:            {0:.10}s       Number of elements:".format(time.time()-start_time), len(transactions_df))
     
     # Sort transactions chronologically
     transactions_df=transactions_df.sort_values('TX_DATETIME')
@@ -264,7 +218,7 @@ def generate_dataset_default(n_customers = 10000, n_terminals = 1000000, nb_days
     transactions_df.reset_index(inplace=True)
     # TRANSACTION_ID are the dataframe indices, starting from 0
     transactions_df.rename(columns = {'index':'TRANSACTION_ID'}, inplace = True)
-    transactions_df = add_frauds(customer_profiles_table, terminal_profiles_table, transactions_df)
+    transactions_df = add_frauds(transactions_df)
     return (customer_profiles_table, terminal_profiles_table, transactions_df)
     
 
@@ -316,7 +270,8 @@ def extend_transactions(df):
     li = [random.randint(0,4) for x in li]
     li = [typep[x] for x in li]
     df=df.assign(TX_PRODUCT_TYPE=lambda x:pd.Series(li))
-    return df
+    df.to_csv(path+"extended_transactions.csv",index=False)
+
     
 
 @timer_func
@@ -436,7 +391,7 @@ def set_buying_friends_iterate(connection):
     [t2:Transaction{tx_product_type: type}]-(c2)
     WITH c1, c2,t, COUNT(DISTINCT t1) AS n1, COUNT(DISTINCT t2) AS n2 
     WHERE c1.customer_id > c2.customer_id AND n1 > 3 AND n2 > 3
-    MERGE (c1)-[:Buying_Friend]->(c2)",
+    MERGE (c1)-[:BUYING_FRIEND]->(c2)",
         { parallel:true, concurrency:1000,batchSize:100})
     """
     execute([c],connection)
@@ -445,22 +400,17 @@ def set_buying_friends_iterate(connection):
         
 @timer_func
 def set_buying_friends(connection):
-    threads=[]
+
     for t in ["high-tech", "food", "clothing", "consumable", "other"]:
-        
-        c="""   MATCH (c1)-[t1:Transaction{tx_product_type: '"""+ t +"""'}]->(t)<- 
-                [t2:Transaction{tx_product_type: '"""+ t +"""'}]-(c2)
+        c="""   
+                MATCH (c1)-[t1:Transaction{tx_product_type: '"""+t+"""'}]->(t)<- 
+                [t2:Transaction{tx_product_type: '"""+t+"""'}]-(c2)
                 WITH c1, c2,t, COUNT(DISTINCT t1) AS n1, COUNT(DISTINCT t2) AS n2 
                 WHERE c1.customer_id > c2.customer_id AND n1 > 3 AND n2 > 3
-                MERGE (c1)-[:Buying_Friend]->(c2)
+                MERGE (c1)-[:BUYING_FRIEND]->(c2)
         """
-        thread=threading.Thread(target=execute,args=([c],connection))
-        thread.start()
-        threads.append(thread)
-    
-    for t in threads:
-        t.join()
-        
+        execute([c],connection)
+
 
 
     
@@ -509,7 +459,7 @@ def print_sizes():
     s2=os.path.getsize(path+"customers.csv")
     s3=os.path.getsize(path+"terminals.csv")
     print("-"*40)
-    print(f'{"transactions.csv ":<20} {str((s1)*0.000001 ):^6} MB')
+    print(f'{"transactions.csv ":<20} {str((s1)*0.000001 ):^6} MB ')
     print(f'{"customers.csv ":<20} {str((s2)*0.000001 ):^6} MB')
     print(f'{"terminals.csv ":<20} {str((s3)*0.000001 ):^6} MB')
     print(f'{"TOTAL: ":<20} {str((s1+s2+s3)*0.000001 ):^6} MB')
@@ -529,16 +479,15 @@ def create_model(p, data_base_connection, n_customers = 100, n_terminals = 100, 
     #LOAD CSV into DB
     load_CSV(data_base_connection)
     
-    # query_a(data_base_connection)
-    # query_b(data_base_connection)
-    # query_c(data_base_connection)
+    query_a(data_base_connection)
+    query_b(data_base_connection)
+    query_c(data_base_connection)
     
     # extend dataframe
-    extend_transactions(transactions_df).to_csv(path+"extended_transactions.csv",index=False)
+    extend_transactions(transactions_df)#crea il csv
     #updateDB(data_base_connection)
     fastUpdateDB(data_base_connection)
     
-    #addFraud_asRequested(data_base_connection) #se fatto prima dell'update usare updateDB invece di fastUpdateDB
     set_buying_friends(data_base_connection)
     
     query_e(data_base_connection)
@@ -552,11 +501,11 @@ def create_model(p, data_base_connection, n_customers = 100, n_terminals = 100, 
 if __name__ == "__main__":
     data_base_connection=GraphDatabase.driver(uri = "bolt://localhost:7687", auth=("neo4j", "1234"))
     clear_DB(data_base_connection)
-    create_model("small/",data_base_connection,900,1000,36)
+    create_model("small/",data_base_connection,100,100,160)
     # clear_DB(data_base_connection)
-    # create_model("medium/",data_base_connection,100,1000,5)
+    # create_model("medium/",data_base_connection,5000,10000,160)
     # clear_DB(data_base_connection)
-    # create_model("big/",data_base_connection,100,1000,10)
+    # create_model("big/",data_base_connection,10000,10000,160)
     data_base_connection.close()
     
 
