@@ -111,7 +111,7 @@ def get_list_terminals_within_radius(customer_profile, x_y_terminals, r):
 
 
 
-def generate_transactions_table(customer_profile, start_date = "2022-02-06", nb_days = 10):
+def generate_transactions_table(customer_profile, start_date = "2022-03-03", nb_days = 10):
     
     customer_transactions = []
     
@@ -162,7 +162,7 @@ def generate_transactions_table(customer_profile, start_date = "2022-02-06", nb_
     return customer_transactions  
     
 
-
+@timer_func
 def add_frauds(customer_profiles_table, terminal_profiles_table, transactions_df):
     
     # By default, all transactions are genuine
@@ -345,7 +345,7 @@ def load_CSV(connection):
     c3= """ CALL apoc.periodic.iterate('
             CALL apoc.load.csv(\\'/Users/pietrobarone/Documents/UniMI/DBMS/Progetto/"""+path+"""transactions.csv\\') yield map as row return row','
             MATCH (c:Customer),(t:Terminal)
-            WHERE c.customer_id=row.CUSTOMER_ID and t.terminal_id=row.TERMINAL_ID
+            WHERE c.customer_id=toInteger(row.CUSTOMER_ID) and t.terminal_id=toInteger(row.TERMINAL_ID)
             CALL apoc.create.relationship(c,"Transaction",
             {transaction_id:toInteger(row.TRANSACTION_ID),
             tx_time_seconds:toInteger(row.TX_TIME_SECONDS),
@@ -363,8 +363,8 @@ def load_CSV(connection):
 
 @timer_func
 def clear_DB(connection):
-    c1="""drop CONSTRAINT terminal_id IF EXISTS"""
-    c2="""drop CONSTRAINT customer_id IF EXISTS"""
+    c1="""DROP CONSTRAINT terminal_id IF EXISTS"""
+    c2="""DROP CONSTRAINT customer_id IF EXISTS"""
     c3="""DROP CONSTRAINT transaction_id IF EXISTS"""
     c4="""  CALL apoc.periodic.iterate(
             'MATCH ()-[r]->() RETURN id(r) AS id', 
@@ -375,16 +375,13 @@ def clear_DB(connection):
             'MATCH (n) WHERE id(n)=id DELETE n', 
             {batchSize: 10000});"""
 
-
-
-
     execute([c1,c2,c3,c4,c5],connection)
 
 @timer_func
 def updateDB(connection):
     c=  """ CALL apoc.periodic.iterate('
             CALL apoc.load.csv(\\'/Users/pietrobarone/Documents/UniMI/DBMS/Progetto/"""+path+"""extended_transactions.csv\\') yield map as row return row','
-            MATCH ()-[t:Transaction {transaction_id: row.TRANSACTION_ID}]-()
+            MATCH ()-[t:Transaction {transaction_id: toInteger(row.TRANSACTION_ID)}]-()
             set t.tx_period =row.TX_PERIOD, t.tx_product_type =row.TX_PRODUCT_TYPE
             ', { parallel:true, concurrency:10000,batchSize:1000});"""
     
@@ -396,7 +393,7 @@ def fastUpdateDB(connection):
     c="""   CALL apoc.periodic.iterate('
             CALL apoc.load.csv(\\'/Users/pietrobarone/Documents/UniMI/DBMS/Progetto/"""+path+"""extended_transactions.csv\\') yield map as row return row','
             MATCH (c:Customer),(t:Terminal)
-            WHERE c.customer_id=row.CUSTOMER_ID and t.terminal_id=row.TERMINAL_ID
+            WHERE c.customer_id=toInteger(row.CUSTOMER_ID) and t.terminal_id=toInteger(row.TERMINAL_ID)
             CALL apoc.create.relationship(c,"Transaction",
             {transaction_id:toInteger(row.TRANSACTION_ID),
             tx_time_seconds:toInteger(row.TX_TIME_SECONDS),
@@ -431,21 +428,31 @@ def addFraud_asRequested(connection):
 
     
 @timer_func
-def set_buying_friends_dense(connection):
+def set_buying_friends_iterate(connection):
+    
+    c="""CALL apoc.periodic.iterate(
+    "MATCH (a)-[t:Transaction]-(b) Return distinct(t.tx_product_type) as type",
+    "MATCH (c1)-[t1:Transaction{tx_product_type: type}]->(t)<- 
+    [t2:Transaction{tx_product_type: type}]-(c2)
+    WITH c1, c2,t, COUNT(DISTINCT t1) AS n1, COUNT(DISTINCT t2) AS n2 
+    WHERE c1.customer_id > c2.customer_id AND n1 > 3 AND n2 > 3
+    MERGE (c1)-[:Buying_Friend]->(c2)",
+        { parallel:true, concurrency:1000,batchSize:100})
+    """
+    execute([c],connection)
+  
+  
+        
+@timer_func
+def set_buying_friends(connection):
     threads=[]
     for t in ["high-tech", "food", "clothing", "consumable", "other"]:
         
-        c="""CALL apoc.periodic.iterate(
-        "MATCH (ter:Terminal) Return ter",
-        "match (t:Terminal{terminal_id:ter.terminal_id})-[tr:Transaction{tx_product_type:'"""+ t +"""'}]-(c:Customer) with count(tr)as n,c where n>3 
-            with collect(c) as cs
-            UNWIND cs as c1
-            UNWIND cs as c2
-            with c1,c2
-            where c1<>c2
-            MERGE (c1)-[r:BuyingFriend]->(c2)
-            RETURN *",
-            { parallel:true, concurrency:1000,batchSize:100})
+        c="""   MATCH (c1)-[t1:Transaction{tx_product_type: '"""+ t +"""'}]->(t)<- 
+                [t2:Transaction{tx_product_type: '"""+ t +"""'}]-(c2)
+                WITH c1, c2,t, COUNT(DISTINCT t1) AS n1, COUNT(DISTINCT t2) AS n2 
+                WHERE c1.customer_id > c2.customer_id AND n1 > 3 AND n2 > 3
+                MERGE (c1)-[:Buying_Friend]->(c2)
         """
         thread=threading.Thread(target=execute,args=([c],connection))
         thread.start()
@@ -454,15 +461,7 @@ def set_buying_friends_dense(connection):
     for t in threads:
         t.join()
         
-@timer_func
-def set_buying_friends(connection):
-    c="""   MATCH (c1:Customer)-[tx:Transaction]-(t)--(c2:Customer), 
-            (c1)-[t1:Transaction{tx_product_type: tx.tx_product_type}]->(t), 
-            (c2)-[t2:Transaction{tx_product_type: tx.tx_product_type}]->(t) 
-            WITH c1, c2, COUNT(DISTINCT t1) AS n1, COUNT(DISTINCT t2) AS n2 
-            WHERE c1.customer_id > c2.customer_id AND n1 > 3 AND n2 > 3 
-            MERGE (c1)-[:BuyingFriend]->(c2)"""
-    execute([c],connection)
+
 
     
 @timer_func
@@ -500,7 +499,7 @@ def query_c(connection, customer_id=4, degree=3):
 def query_e(connection):
     c1="""  MATCH ()-[t:Transaction]->()
             RETURN t.tx_period, count(t) as number_of_transactions, 
-            count(CASE WHEN t.tx_fraud = 1 THEN 1 END) as number_of_fraud_transactions"""
+            sum(t.tx_fraud) as number_of_fraud_transactions"""
     execute([c1],connection)  
 
 
@@ -530,9 +529,9 @@ def create_model(p, data_base_connection, n_customers = 100, n_terminals = 100, 
     #LOAD CSV into DB
     load_CSV(data_base_connection)
     
-    query_a(data_base_connection)
-    query_b(data_base_connection)
-    query_c(data_base_connection)
+    # query_a(data_base_connection)
+    # query_b(data_base_connection)
+    # query_c(data_base_connection)
     
     # extend dataframe
     extend_transactions(transactions_df).to_csv(path+"extended_transactions.csv",index=False)
@@ -553,7 +552,7 @@ def create_model(p, data_base_connection, n_customers = 100, n_terminals = 100, 
 if __name__ == "__main__":
     data_base_connection=GraphDatabase.driver(uri = "bolt://localhost:7687", auth=("neo4j", "1234"))
     clear_DB(data_base_connection)
-    create_model("small/",data_base_connection,10,10,3)
+    create_model("small/",data_base_connection,900,1000,36)
     # clear_DB(data_base_connection)
     # create_model("medium/",data_base_connection,100,1000,5)
     # clear_DB(data_base_connection)
