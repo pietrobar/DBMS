@@ -479,9 +479,9 @@ def create_model(p, data_base_connection, n_customers = 100, n_terminals = 100, 
     #LOAD CSV into DB
     load_CSV(data_base_connection)
     
-    query_a(data_base_connection)
-    query_b(data_base_connection)
-    query_c(data_base_connection)
+    # query_a(data_base_connection)
+    # query_b(data_base_connection)
+    # query_c(data_base_connection)
     
     # extend dataframe
     extend_transactions(transactions_df)#crea il csv
