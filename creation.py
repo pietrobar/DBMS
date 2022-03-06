@@ -275,8 +275,8 @@ def extend_transactions(df):
 @timer_func
 def extend_transactions_base(connection):
 
-    period = ['morning', 'afternoon', 'evening', 'night']
-    typep = ['high-tech', 'food', 'clothing', 'consumable', 'other']
+    period = ["morning", "afternoon", "evening", "night"]
+    typep = ["high-tech", "food", "clothing", "consumable", "other"]
     
     session = connection.session()   
     transactions = session.run("MATCH ()-[t:Transaction]->() RETURN t.transaction_id").values()
