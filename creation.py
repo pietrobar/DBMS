@@ -165,7 +165,7 @@ def generate_transactions_table(customer_profile, start_date = "2022-03-03", nb_
 def add_frauds(transactions_df):
     
     #random frauds
-    transactions_df['TX_FRAUD']=random.randint(0,1) == 1
+    transactions_df['TX_FRAUD']= np.random.choice([0,1], size=len(transactions_df))
     return transactions_df  
                
 def enthread(target, args):
