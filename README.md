@@ -1,5 +1,6 @@
 # Progetto NEW GENERATION DATA MODELS AND DBMSS
 
+>Questo progetto riguarda la ricerca e l'implementazione soluzione migliore per gestire dati bancari in un sistema di rilevamento di frodi con carta di credito.
 
 Riferimento al [testo del progetto](https://github.com/pietrobar/DBMS/blob/master/Project-fraudDetection-vers1.pdf)
 
