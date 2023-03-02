@@ -1,31 +1,39 @@
-# NEW GENERATION DATA MODELS AND DBMSS' Project
-fraud detection nosql db
+# Progetto NEW GENERATION DATA MODELS AND DBMSS
 
-The project has been developed using a graph database. In particular neo4j.
 
-UML class diagram
-Thinking of a logical model that adapts to the project request, it is easy to define a first draft of the model through two main subjects (customer and terminal) connected to each other through a relationship (transaction). The peculiarity of the transactions is that they contain peculiar data that exists only when the aforementioned transaction is created. For this reason it makes sense to define the transaction using the "reified relationship" type provided by UML.
+Riferimento al [testo del progetto](https://github.com/pietrobar/DBMS/blob/master/Project-fraudDetection-vers1.pdf)
 
-Given the simplicity of the model, it is not necessary to define additional constraints in addition to those that can be specified via UML.
+Il progetto è stato sviluppato utilizzando un database a grafo. In particolare tramite neo4j.
 
-Immagine UML
+Diagramma delle classi UML
+Pensando ad un modello logico che si adatti alla richiesta progettuale, è facile definire una prima bozza del modello attraverso due soggetti principali (cliente e terminale) collegati tra loro attraverso una relazione (transazione). La particolarità delle transazioni è che contengono dati peculiari che esistono solo quando viene creata la suddetta transazione. Per questo motivo ha senso definire la transazione utilizzando il tipo di "relazione reificata" fornito da UML.
 
-Logical model
-The logical model is realized, as already mentioned, in neo4j. It directly depends on the UML model and from this you can see the similarities. There are two labels:
+Data la semplicità del modello, non è necessario definire ulteriori vincoli oltre a quelli specificabili tramite UML.
 
-Customer (with related properties)
-Terminal (with related properties)
-Mirroring the UML model there is only one relationship:
+Ecco il diagramma definito:
 
-Transaction (with related properties)
-Why graph database
-The main reason that convinced me to use this model comes from query c. In particular, the request for co-customer-relationships CC of degree k is a chained relationship that is intuitively mappable to a path of a graph. Neo4j being the state of the art for graph db seemed the best solution. In fact, the query in question is the most complex in computational terms, and by exploiting the structure of neo4j, both the structure of the query itself and its execution are more natural.
+![Screenshot 2023-03-02 alle 11 40 54](https://user-images.githubusercontent.com/34039242/222405636-8dd2d7cd-f74e-48fa-804e-dd16fb45b92f.jpg)
 
-Immagine modello logico
 
-The script
-c. The description of the script for loading the datasets in the chosen NOSQL system
+Modello logico
+Il modello logico è realizzato, come già accennato, in neo4j. Dipende direttamente dal modello UML. Ci sono due etichette:
 
-d. The description of the scripts for the implementation of the required operations
+Cliente (con relative proprietà)
+Terminale (con proprietà correlate)
 
-e. A discussion of the performances obtained by the execution of the operations on the three considered datasets. Please, discuss the eventual application of patterns for improving the performances of the considered operations.
+Rispecchiando il modello UML c'è solo una relazione:
+Transazione (con proprietà correlate)
+
+Il modello logico ha una struttura del tutto simile al diagramma delle classi
+
+
+Perché il database a grafo?
+Il motivo principale che mi ha convinto ad utilizzare questo modello viene dalla query c. In particolare, la richiesta di co-clienti CC di grado k è una relazione concatenata intuitivamente mappabile ad un percorso di un grafo. Neo4j essendo lo stato dell'arte per i db a grafo sembrava la soluzione migliore. Infatti la query in questione è la più complessa in termini computazionali, e sfruttando la struttura di neo4j, sia la struttura della query stessa che la sua esecuzione risultano più efficienti.
+
+
+Cosa contiene lo [script](https://github.com/pietrobar/DBMS/blob/master/loading_and_operations.py):
+c. La descrizione dello script per caricare i dataset nel sistema NOSQL scelto
+
+d. La descrizione degli script per l'implementazione delle operazioni richieste
+
+e. Una discussione delle prestazioni ottenute dall'esecuzione delle operazioni sui tre dataset considerati. Si prega di discutere l'eventuale applicazione di schemi per migliorare le prestazioni delle operazioni considerate.
