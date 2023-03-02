@@ -32,6 +32,7 @@ Il motivo principale che mi ha convinto ad utilizzare questo modello viene dalla
 
 
 Cosa contiene lo [script](https://github.com/pietrobar/DBMS/blob/master/loading_and_operations.py):
+
 c. La descrizione dello script per caricare i dataset nel sistema NOSQL scelto
 
 d. La descrizione degli script per l'implementazione delle operazioni richieste
